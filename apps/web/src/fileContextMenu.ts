@@ -1,11 +1,13 @@
 import {
   EDITORS,
+  managedEditorUrl,
   type ContextMenuItem,
   type EditorId,
   type EnvironmentId,
 } from "@t3tools/contracts";
 
 import { resolveDiffPathForWorkspace } from "./diffFileActions";
+import { openManagedEditorUrl, useRemoteOpenState } from "./remoteOpen";
 import {
   revealInFileExplorerLabelForKind,
   revealInFileExplorerLabelForOs,
@@ -21,6 +23,8 @@ import { useAtomValue } from "@effect/atom-react";
 export type FileContextMenuAction =
   | "reveal-in-folder"
   | "open"
+  /** The policy's page, which opens files in place of any editor. */
+  | "open-in-page"
   /** Submenu parent; never the activated id. */
   | "open-with"
   | `editor:${EditorId}`;
@@ -54,13 +58,20 @@ export interface FileContextMenuCapabilities {
   readonly revealLabel: string | undefined;
   readonly canOpenDefault: boolean;
   readonly editorIds: ReadonlyArray<EditorId>;
+  /** Set when the policy sends files to a page: the menu then offers that page alone. */
+  readonly pageLabel?: string | undefined;
 }
 
-function buildFileContextMenuItems(input: {
+export function buildFileContextMenuItems(input: {
   readonly hasAbsolutePath: boolean;
   readonly capabilities: FileContextMenuCapabilities;
 }): readonly ContextMenuItem<FileContextMenuAction>[] {
   if (!input.hasAbsolutePath) return [];
+  if (input.capabilities.pageLabel !== undefined) {
+    return [
+      { id: "open-in-page", label: `Open in ${input.capabilities.pageLabel}`, icon: "pencil" },
+    ];
+  }
   const items: ContextMenuItem<FileContextMenuAction>[] = [];
   if (input.capabilities.canOpenDefault) {
     items.push({ id: "open", label: "Open", icon: "pencil" });
@@ -89,9 +100,12 @@ function buildFileContextMenuItems(input: {
 export function useFileContextMenu(environmentId: EnvironmentId | null) {
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, { reportFailure: false });
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const remote = useRemoteOpenState(environmentId);
+  const page = remote.mode === "editor-url" ? remote : undefined;
 
   const availableEditors = serverConfig?.availableEditors ?? [];
   const capabilities: FileContextMenuCapabilities = {
+    pageLabel: page && (page.label ?? EDITOR_LABEL_BY_ID.get(page.editor) ?? page.editor),
     // WSL can reveal in Windows Explorer despite reporting Linux; use server wording.
     revealLabel:
       environmentId !== null &&
@@ -111,6 +125,13 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
   ): Promise<void> => {
     const absolutePath = resolveFileContextMenuAbsolutePath(target);
     if (absolutePath === null || environmentId === null) return;
+    if (action === "open-in-page") {
+      if (page === undefined) return;
+      await openManagedEditorUrl(
+        managedEditorUrl(page, { absolutePath, isFile: true, host: page.host }),
+      );
+      return;
+    }
 
     const reveal = action === "reveal-in-folder";
     const editor =

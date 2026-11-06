@@ -561,6 +561,9 @@ function useChatMarkdownState({
   const canUseShellActions =
     canOperateHost &&
     canUseMarkdownFileShellActions(environmentId, remoteOpen.state.mode, remoteOpen.isResolved);
+  // The policy's page opens a file from the browser, with no shell on the environment.
+  const managedPage = remoteOpen.state.mode === "editor-url" ? remoteOpen.state : undefined;
+  const canOpenFiles = canUseShellActions || (environmentId !== null && managedPage !== undefined);
   const openMarkdownMedia = (
     source: string,
     resolvedFilePath?: string,
@@ -631,7 +634,12 @@ function useChatMarkdownState({
   );
   const projects = useProjects();
   const [preferredEditor] = usePreferredEditor(availableEditors);
-  const preferredEditorMenuLabel = openInEditorMenuLabel(preferredEditor);
+  const preferredEditorMenuLabel =
+    managedPage === undefined
+      ? openInEditorMenuLabel(preferredEditor)
+      : managedPage.label === undefined
+        ? openInEditorMenuLabel(managedPage.editor)
+        : `Open in ${managedPage.label}`;
   const openInPreferredEditor = useOpenInPreferredEditor(environmentId, availableEditors);
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
     reportFailure: false,
@@ -857,7 +865,7 @@ function useChatMarkdownState({
         theme={resolvedTheme}
         threadRef={threadRef}
         onOpen={
-          canUseShellActions
+          canOpenFiles
             ? async () =>
                 openInPreferredEditor(
                   markdownFileEditorTarget(fileLinkMeta, await resolveHostPath()),

@@ -1,7 +1,7 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveFileContextMenuAbsolutePath } from "./fileContextMenu";
+import { buildFileContextMenuItems, resolveFileContextMenuAbsolutePath } from "./fileContextMenu";
 
 const BASE_TARGET = {
   environmentId: EnvironmentId.make("environment-local"),
@@ -40,5 +40,24 @@ describe("resolveFileContextMenuAbsolutePath", () => {
         filePath: "/absolute/src/index.ts",
       }),
     ).toBeNull();
+  });
+});
+
+describe("buildFileContextMenuItems", () => {
+  it("offers the policy's page alone when the policy sends files to one", () => {
+    const capabilities = {
+      revealLabel: "Reveal in Finder",
+      canOpenDefault: true,
+      editorIds: ["vscode", "file-manager"] as const,
+    };
+    expect(
+      buildFileContextMenuItems({
+        hasAbsolutePath: true,
+        capabilities: { ...capabilities, pageLabel: "IDE" },
+      }),
+    ).toEqual([{ id: "open-in-page", label: "Open in IDE", icon: "pencil" }]);
+    expect(
+      buildFileContextMenuItems({ hasAbsolutePath: true, capabilities }).map((item) => item.id),
+    ).toEqual(["open", "reveal-in-folder", "open-with"]);
   });
 });

@@ -4,16 +4,19 @@ import {
   EditorId,
   EnvironmentAuthorizationError,
   EnvironmentId,
+  managedEditorUrl,
 } from "@t3tools/contracts";
 import {
   mapAtomCommandResult,
   type AtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "./hooks/useLocalStorage";
+import { openManagedEditorUrl, useRemoteOpenState } from "./remoteOpen";
 import { shellEnvironment } from "./state/shell";
 import { useAtomCommand } from "./state/use-atom-command";
 import { readEnvironmentScope } from "./state/session";
@@ -71,10 +74,12 @@ export function useOpenInPreferredEditor(
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
     reportFailure: false,
   });
+  const remote = useRemoteOpenState(environmentId);
   type OpenInEditorError = AtomCommandFailure<Awaited<ReturnType<typeof openInEditor>>>;
 
   return async (
     targetPath: string,
+    kind: "file" | "folder" = "file",
   ): Promise<
     AtomCommandResult<
       EditorId,
@@ -89,6 +94,24 @@ export function useOpenInPreferredEditor(
         Cause.fail(
           new PreferredEditorEnvironmentRequiredError({
             targetPath,
+          }),
+        ),
+      );
+    }
+    // The policy's page opens files in place of any editor, as the Open in control does.
+    if (remote.mode === "editor-url") {
+      const url = managedEditorUrl(remote, {
+        absolutePath: splitFilePathPosition(targetPath).path,
+        isFile: kind === "file",
+        host: remote.host,
+      });
+      if (await openManagedEditorUrl(url)) return AsyncResult.success(remote.editor);
+      return AsyncResult.failure(
+        Cause.fail(
+          new PreferredEditorUnavailableError({
+            environmentId,
+            targetPath,
+            availableEditorIds: [remote.editor],
           }),
         ),
       );

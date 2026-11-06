@@ -12,9 +12,15 @@ const state = vi.hoisted(() => ({
   run: vi.fn(),
   getPreference: vi.fn(),
   setPreference: vi.fn(),
+  remote: { mode: "local-exec" } as { readonly mode: string } & Record<string, unknown>,
+  openPage: vi.fn(),
 }));
 
 vi.mock("react", () => ({ useCallback: (callback: unknown) => callback }));
+vi.mock("./remoteOpen", () => ({
+  useRemoteOpenState: () => state.remote,
+  openManagedEditorUrl: state.openPage,
+}));
 vi.mock("./state/shell", () => ({ shellEnvironment: { openInEditor: "openInEditor" } }));
 vi.mock("./state/use-atom-command", () => ({ useAtomCommand: () => state.run }));
 vi.mock("./state/session", () => ({
@@ -37,6 +43,27 @@ beforeEach(() => {
   state.run.mockReset().mockResolvedValue(AsyncResult.success(undefined));
   state.getPreference.mockReset().mockReturnValue(null);
   state.setPreference.mockReset();
+  state.remote = { mode: "local-exec" };
+  state.openPage.mockReset().mockResolvedValue(true);
+});
+
+it("opens files and folders on the policy's page, with no editor on the environment", async () => {
+  state.remote = {
+    mode: "editor-url",
+    editor: "vscode",
+    urlTemplate: "https://app.example/ide#host={host}&path={path}&kind={kind}",
+    host: "chat.example",
+  };
+  const open = useOpenInPreferredEditor(secondary, []);
+  expect(await open("/work/src/main.ts:12:3")).toMatchObject({ _tag: "Success", value: "vscode" });
+  expect(state.openPage).toHaveBeenLastCalledWith(
+    "https://app.example/ide#host=chat.example&path=%2Fwork%2Fsrc%2Fmain.ts&kind=file",
+  );
+  await open("/work/logs", "folder");
+  expect(state.openPage).toHaveBeenLastCalledWith(
+    "https://app.example/ide#host=chat.example&path=%2Fwork%2Flogs&kind=folder",
+  );
+  expect(state.run).not.toHaveBeenCalled();
 });
 
 it("does not use another environment's grant or change preferences when denied", async () => {

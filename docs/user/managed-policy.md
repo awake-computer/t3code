@@ -308,7 +308,8 @@ so allow the same values there.
 
 `editor` sends **Open in** to a web page instead of an editor on a machine, such as a browser IDE
 or a page that opens one. T3 Code fills in the page's address and opens it in a new tab, and offers
-no other editor.
+no other editor. File links in chat and the terminal, files in the diff panel and the file menu,
+and Settings' files and logs folder open on the same page.
 
 ```json
 {
