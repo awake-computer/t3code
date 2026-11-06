@@ -8,6 +8,7 @@ import type { DesktopSshEnvironmentTarget, EnvironmentMachineKind } from "@t3too
 import * as Option from "effect/Option";
 import type { ReactNode } from "react";
 
+import { IS_AWAKE_BRAND } from "~/branding";
 import { cn } from "~/lib/utils";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { usePreparedConnection } from "~/state/session";
@@ -24,7 +25,10 @@ export function environmentTransportLabel(
   activeTarget: ConnectionTarget | null = null,
 ): string {
   const { entry } = environment;
-  if (entry.target._tag === "PrimaryConnectionTarget") return "This machine";
+  // In Awake's build the primary environment is the member's box, named after it by the server.
+  if (entry.target._tag === "PrimaryConnectionTarget") {
+    return IS_AWAKE_BRAND ? "Your box" : "This machine";
+  }
   const routes = connectionRoutes(entry);
   if (routes.length > 1) {
     const active =

@@ -1,9 +1,11 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import { awakeBuild } from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 
 interface ResolveServerEnvironmentLabelInput {
@@ -179,9 +181,23 @@ const resolveFriendlyHostLabel = Effect.fn("resolveFriendlyHostLabel")(function*
   return null;
 });
 
+/** In Awake's build, the box's name, which boxd sets in the service's environment. */
+export const resolveAwakeBoxName = Effect.gen(function* () {
+  if (!awakeBuild) return null;
+  const value = yield* Config.option(Config.String("AWAKE_BOX_NAME")).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+  );
+  return normalizeLabel(Option.getOrUndefined(value));
+});
+
 export const resolveServerEnvironmentLabel = Effect.fn("resolveServerEnvironmentLabel")(function* (
   input: ResolveServerEnvironmentLabelInput,
 ) {
+  const boxName = yield* resolveAwakeBoxName;
+  if (boxName) {
+    return boxName;
+  }
+
   const friendlyHostLabel = yield* resolveFriendlyHostLabel();
   if (friendlyHostLabel) {
     return friendlyHostLabel;
