@@ -8,6 +8,7 @@ vi.mock(import("../branding"), async (original) => ({
   IS_AWAKE_BRAND: true,
 }));
 
+import { publishedThemeDefinitions } from "../themePalette";
 import { ServerUpdateAction } from "./ServerUpdateAction";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 
@@ -26,5 +27,13 @@ describe("Awake's build", () => {
     );
     expect(screen.container.querySelector("button")).toBeNull();
     expect(screen.container.textContent).toBe("");
+  });
+
+  it("names the palettes the box publishes as awake Match Awake, and leaves others alone", () => {
+    const published = (id: string) =>
+      ({ id, name: "Awake", appearance: "light", canvas: "#f5f4f2", accent: "#834a2b" }) as never;
+    const [awake, other] = publishedThemeDefinitions([published("awake"), published("forest")]);
+    expect(awake?.label).toBe("Match Awake");
+    expect(other?.label).toBe("Awake");
   });
 });

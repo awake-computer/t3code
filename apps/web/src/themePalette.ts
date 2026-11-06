@@ -29,6 +29,7 @@ import {
   type ContextChipAccentKind,
 } from "./lib/contextChipAccents";
 
+import { IS_AWAKE_BRAND, MATCH_AWAKE_THEME_ID } from "./branding";
 import { appAtomRegistry, subscribeAtomChanges } from "./rpc/atomRegistry";
 import { primaryServerEnvironmentThemesAtom } from "./state/server";
 
@@ -273,7 +274,8 @@ function environmentThemeDefinition(theme: EnvironmentTheme): ThemeDefinition {
 
   return {
     id: theme.id,
-    label: theme.name,
+    // Awake's build names the box's own palettes for what they do: follow Awake's console.
+    label: IS_AWAKE_BRAND && theme.id === MATCH_AWAKE_THEME_ID ? "Match Awake" : theme.name,
     appearance: theme.appearance,
     colors: publishedThemeColors(theme, theme.appearance, theme.colors),
     ...(Object.keys(variants).length > 0 ? { variants } : {}),

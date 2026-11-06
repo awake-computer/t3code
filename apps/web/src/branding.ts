@@ -18,6 +18,8 @@ export const HOSTED_APP_CHANNEL_LABEL =
   HOSTED_APP_CHANNEL === "nightly" ? "Nightly" : HOSTED_APP_CHANNEL === "latest" ? "Latest" : null;
 /** Awake's build (T3CODE_BRAND=awake) is Awake Chat, with Awake's mark and no stage in its name. */
 export const IS_AWAKE_BRAND = import.meta.env.T3CODE_BRAND === "awake";
+/** The id a box publishes Awake's palettes under: the appearance setting Match Awake. */
+export const MATCH_AWAKE_THEME_ID = "awake";
 export const APP_BASE_NAME =
   injectedDesktopAppBranding?.baseName ?? (IS_AWAKE_BRAND ? "Awake Chat" : "T3 Code");
 export const APP_STAGE_LABEL =
