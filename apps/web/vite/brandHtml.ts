@@ -24,9 +24,9 @@ function awakeReplacements(): ReadonlyArray<readonly [string, string]> {
   ).trim();
   const markUrl = `data:image/svg+xml,${encodeURIComponent(mark)}`;
   return [
-    ["<title>T3 Code (Beta)</title>", "<title>Awake Code</title>"],
-    ['aria-label="T3 Code splash screen"', 'aria-label="Awake Code splash screen"'],
-    ['src="/apple-touch-icon.png" alt="T3 Code"', `src="${markUrl}" alt="Awake Code"`],
+    ["<title>T3 Code (Beta)</title>", "<title>Awake Chat</title>"],
+    ['aria-label="T3 Code splash screen"', 'aria-label="Awake Chat splash screen"'],
+    ['src="/apple-touch-icon.png" alt="T3 Code"', `src="${markUrl}" alt="Awake Chat"`],
     [
       '<meta name="theme-color" content="#000000" />',
       `<meta name="theme-color" content="${AWAKE_LIGHT}" />`,

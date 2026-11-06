@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Awake Code",
-  "short_name": "Awake Code",
+  "name": "Awake Chat",
+  "short_name": "Awake Chat",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

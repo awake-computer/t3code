@@ -232,7 +232,7 @@ jobs:
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
       # Builds in other repositories report "dev" telemetry, as release.yml has it. T3CODE_BRAND
-      # names the web client Awake Code, with Awake's mark on its splash.
+      # names the web client Awake Chat, with Awake's mark on its splash.
       - name: Build JS bundle
         env:
           T3CODE_TELEMETRY_CHANNEL: dev
@@ -469,5 +469,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" release-assets/t3-*.tar.gz release-assets/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "Awake Code $VERSION" \
+            --title "Awake Chat $VERSION" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
