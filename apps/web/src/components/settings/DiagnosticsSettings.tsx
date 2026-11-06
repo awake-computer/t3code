@@ -24,6 +24,7 @@ import { formatBytes } from "../../lib/formatBytes";
 import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
 import { useOpenInPreferredEditor } from "../../editorPreferences";
+import { offersEditorLaunchers, useRemoteOpenState } from "../../remoteOpen";
 import { useRelativeTimeState } from "../../hooks/useRelativeTimeState";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -728,6 +729,7 @@ function DiagnosticsSettingsBody() {
     reportFailure: false,
   });
   const openInEditor = useOpenInPreferredEditor(environmentId, availableEditors ?? []);
+  const editorLaunchers = offersEditorLaunchers(useRemoteOpenState(environmentId));
   const [resourceWindowMs, setResourceWindowMs] = useState(15 * 60_000);
   const selectedResourceWindow =
     RESOURCE_HISTORY_WINDOWS.find((option) => option.windowMs === resourceWindowMs) ??
@@ -1052,26 +1054,28 @@ function DiagnosticsSettingsBody() {
         headerAction={
           <div className="flex items-center gap-1.5">
             <DiagnosticsLastChecked checkedAt={data?.readAt ?? null} />
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost-muted"
-                    disabled={
-                      !canOpenHostEditor ||
-                      !observability?.logsDirectoryPath ||
-                      isOpeningLogsDirectory
-                    }
-                    onClick={openLogsDirectory}
-                    aria-label="Open logs folder"
-                  >
-                    <FolderOpenIcon />
-                  </Button>
-                }
-              />
-              <TooltipPopup side="top">Open logs folder</TooltipPopup>
-            </Tooltip>
+            {editorLaunchers ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="icon-xs"
+                      variant="ghost-muted"
+                      disabled={
+                        !canOpenHostEditor ||
+                        !observability?.logsDirectoryPath ||
+                        isOpeningLogsDirectory
+                      }
+                      onClick={openLogsDirectory}
+                      aria-label="Open logs folder"
+                    >
+                      <FolderOpenIcon />
+                    </Button>
+                  }
+                />
+                <TooltipPopup side="top">Open logs folder</TooltipPopup>
+              </Tooltip>
+            ) : null}
             <DiagnosticsRefreshButton
               isPending={isPending}
               label="Refresh trace diagnostics"

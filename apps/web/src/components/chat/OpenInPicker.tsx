@@ -14,6 +14,7 @@ import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
 import { usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
 import {
+  offersEditorLaunchers,
   openManagedEditorUrl,
   openRemoteEditorUrl,
   useRemoteCapableEditors,
@@ -308,6 +309,7 @@ export const OpenInPicker = memo(function OpenInPicker({
       : resolvedOptions.map((option) => ({ ...option, label: editorLabel }));
   const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
   const primaryLabel = isPanel ? `Open in ${primaryOption?.label ?? "editor"}` : "Open";
+  if (!offersEditorLaunchers(remote)) return null;
 
   const editorItems = (
     <>

@@ -24,6 +24,7 @@ import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
 import { useFilesystemReadAccess } from "~/state/filesystem";
 import { useOpenInPreferredEditor } from "../editorPreferences";
+import { offersEditorLaunchers, useRemoteOpenState } from "../remoteOpen";
 import { useFileContextMenuHandler } from "../fileContextMenu";
 import { type DraftId } from "../composerDraftStore";
 import { openDiffFilePrimaryAction } from "../diffFileActions";
@@ -257,6 +258,9 @@ export default function DiffPanel({
   const openInPreferredEditor = useOpenInPreferredEditor(
     activeThread?.environmentId ?? null,
     serverConfig?.availableEditors ?? [],
+  );
+  const editorLaunchers = offersEditorLaunchers(
+    useRemoteOpenState(activeThread?.environmentId ?? null),
   );
   const getDiffFileContents = useAtomCommand(reviewEnvironment.diffFileContents);
   const gitStatusQuery = useEnvironmentQuery(
@@ -704,6 +708,7 @@ export default function DiffPanel({
       activeCwd,
       repositoryRoot: activeRepositoryRoot,
       openInEditor: (targetPath) => {
+        if (!editorLaunchers) return;
         void (async () => {
           const result = await openInPreferredEditor(targetPath);
           if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {

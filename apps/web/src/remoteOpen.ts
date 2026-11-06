@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
 import { useAtomValue } from "@effect/atom-react";
 
+import { IS_AWAKE_BRAND } from "~/branding";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isLoopbackHostname } from "~/environments/primary/target";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -181,6 +182,14 @@ export function useRemoteOpenResolution(environmentId: EnvironmentId | null): Re
 
 export function useRemoteOpenState(environmentId: EnvironmentId | null): RemoteOpenState {
   return useRemoteOpenResolution(environmentId).state;
+}
+
+/**
+ * Whether this build offers editor launchers for an environment in `state`. A box has no desktop
+ * editor, so Awake's build offers only the policy's page, and without `limits.editor` none.
+ */
+export function offersEditorLaunchers(state: RemoteOpenState, awake = IS_AWAKE_BRAND): boolean {
+  return !awake || state.mode === "editor-url";
 }
 
 const REMOTE_FALLBACK_EDITORS: ReadonlyArray<EditorId> = ["vscode"];

@@ -83,6 +83,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useOpenInPreferredEditor } from "~/editorPreferences";
+import { offersEditorLaunchers, useRemoteOpenState } from "~/remoteOpen";
 import {
   useGitStackedAction,
   useSourceControlActionRunning,
@@ -276,6 +277,34 @@ function getMenuActionDisabledReason({
 const COMMIT_DIALOG_TITLE = "Commit changes";
 const COMMIT_DIALOG_DESCRIPTION =
   "Review and confirm your commit. Leave the message blank to auto-generate one.";
+
+function ChangedFileSummary({
+  file,
+  isExcluded,
+}: {
+  file: { readonly path: string; readonly insertions: number; readonly deletions: number };
+  isExcluded: boolean;
+}) {
+  return (
+    <>
+      <StartTruncatedPath
+        path={file.path}
+        className={`flex-1${isExcluded ? " text-muted-foreground" : ""}`}
+      />
+      <span className="shrink-0">
+        {isExcluded ? (
+          <span className="text-muted-foreground">Excluded</span>
+        ) : (
+          <>
+            <span className="text-diff-addition">+{formatDiffCount(file.insertions)}</span>
+            <span className="text-muted-foreground"> / </span>
+            <span className="text-diff-deletion">-{formatDiffCount(file.deletions)}</span>
+          </>
+        )}
+      </span>
+    </>
+  );
+}
 
 function GitActionItemIcon({
   icon,
@@ -950,6 +979,7 @@ export default function GitActionsControl({
     activeEnvironmentId,
     serverConfig?.availableEditors ?? [],
   );
+  const editorLaunchers = offersEditorLaunchers(useRemoteOpenState(activeEnvironmentId));
   const threadToastData = activeThreadRef ? { threadRef: activeThreadRef } : undefined;
   const activeServerThreadShell = useQuietThreadShell(activeThreadRef);
   const activeDraftThread = useComposerDraftStore((store) =>
@@ -1744,33 +1774,21 @@ export default function GitActionsControl({
                                     }}
                                   />
                                 )}
-                                <button
-                                  type="button"
-                                  className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left enabled:cursor-pointer"
-                                  disabled={!canOperateThread || workingTreeRoot === null}
-                                  aria-label={`Open ${file.path} in editor`}
-                                  onClick={() => openChangedFileInEditor(file.path)}
-                                >
-                                  <StartTruncatedPath
-                                    path={file.path}
-                                    className={`flex-1${isExcluded ? " text-muted-foreground" : ""}`}
-                                  />
-                                  <span className="shrink-0">
-                                    {isExcluded ? (
-                                      <span className="text-muted-foreground">Excluded</span>
-                                    ) : (
-                                      <>
-                                        <span className="text-diff-addition">
-                                          +{formatDiffCount(file.insertions)}
-                                        </span>
-                                        <span className="text-muted-foreground"> / </span>
-                                        <span className="text-diff-deletion">
-                                          -{formatDiffCount(file.deletions)}
-                                        </span>
-                                      </>
-                                    )}
-                                  </span>
-                                </button>
+                                {editorLaunchers ? (
+                                  <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left enabled:cursor-pointer"
+                                    disabled={!canOperateThread || workingTreeRoot === null}
+                                    aria-label={`Open ${file.path} in editor`}
+                                    onClick={() => openChangedFileInEditor(file.path)}
+                                  >
+                                    <ChangedFileSummary file={file} isExcluded={isExcluded} />
+                                  </button>
+                                ) : (
+                                  <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                    <ChangedFileSummary file={file} isExcluded={isExcluded} />
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

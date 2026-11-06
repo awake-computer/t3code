@@ -331,6 +331,10 @@ and Settings' files and logs folder open on the same page.
 - `label`: what the button opens, as "Open in" followed by the label, such as `IDE`. The default
   is the editor's own name.
 
+Awake Chat, Awake's build, runs in a box, which has no desktop editor. Without `editor` it offers
+none of these: no **Open in** or editor choice, no open-in-editor on file links or in the diff
+panel's file menu, and no buttons that open Settings' files or the logs folder.
+
 ## What a policy does not cover
 
 The policy controls what T3 Code does. Agents run through each provider's own CLI, which reads its

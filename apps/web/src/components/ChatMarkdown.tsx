@@ -151,7 +151,11 @@ import { IS_AWAKE_BRAND } from "../branding";
 import { confirmAgentLink } from "../agentLinks";
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
-import { resolveRemoteOpenState, useRemoteOpenResolution } from "../remoteOpen";
+import {
+  offersEditorLaunchers,
+  resolveRemoteOpenState,
+  useRemoteOpenResolution,
+} from "../remoteOpen";
 import { useRightPanelStore } from "../rightPanelStore";
 import { readThreadShell, useProjects } from "../state/entities";
 import { serverEnvironment } from "../state/server";
@@ -562,6 +566,7 @@ function useChatMarkdownState({
   const remoteOpen = useRemoteOpenResolution(environmentId);
   const canUseShellActions =
     canOperateHost &&
+    offersEditorLaunchers(remoteOpen.state) &&
     canUseMarkdownFileShellActions(environmentId, remoteOpen.state.mode, remoteOpen.isResolved);
   // The policy's page opens a file from the browser, with no shell on the environment.
   const managedPage = remoteOpen.state.mode === "editor-url" ? remoteOpen.state : undefined;

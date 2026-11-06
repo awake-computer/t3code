@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 
 import { resolveDiffPathForWorkspace } from "./diffFileActions";
-import { openManagedEditorUrl, useRemoteOpenState } from "./remoteOpen";
+import { offersEditorLaunchers, openManagedEditorUrl, useRemoteOpenState } from "./remoteOpen";
 import {
   revealInFileExplorerLabelForKind,
   revealInFileExplorerLabelForOs,
@@ -102,12 +102,14 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const remote = useRemoteOpenState(environmentId);
   const page = remote.mode === "editor-url" ? remote : undefined;
+  const launchers = offersEditorLaunchers(remote);
 
-  const availableEditors = serverConfig?.availableEditors ?? [];
+  const availableEditors = launchers ? (serverConfig?.availableEditors ?? []) : [];
   const capabilities: FileContextMenuCapabilities = {
     pageLabel: page && (page.label ?? EDITOR_LABEL_BY_ID.get(page.editor) ?? page.editor),
     // WSL can reveal in Windows Explorer despite reporting Linux; use server wording.
     revealLabel:
+      launchers &&
       environmentId !== null &&
       serverConfig?.shellRevealInFileManager === true &&
       serverConfig.availableEditors.includes("file-manager")

@@ -6,7 +6,7 @@ import {
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 
 import { useOpenInPreferredEditor } from "../editorPreferences";
-import { useRemoteOpenState } from "../remoteOpen";
+import { offersEditorLaunchers, useRemoteOpenState } from "../remoteOpen";
 import { useEnvironmentScope } from "../state/session";
 import { Button } from "./ui/button";
 import { stackedThreadToast, toastManager } from "./ui/toast";
@@ -28,6 +28,7 @@ export function KeybindingsConfigWarning({
   // The policy's page needs no editor on the environment.
   const hasEditor = availableEditors.length > 0 || remote.mode === "editor-url";
 
+  if (!offersEditorLaunchers(remote)) return message;
   return (
     <>
       {message}

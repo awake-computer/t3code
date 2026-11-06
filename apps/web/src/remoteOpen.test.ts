@@ -6,7 +6,7 @@ import {
 import { buildRemoteOpenUrl, EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveRemoteOpenState } from "./remoteOpen";
+import { offersEditorLaunchers, resolveRemoteOpenState, type RemoteOpenState } from "./remoteOpen";
 
 const environmentId = EnvironmentId.make("environment-1");
 
@@ -140,6 +140,33 @@ describe("resolveRemoteOpenState", () => {
         }),
       ).toEqual({ mode: "remote-unavailable" });
     }
+  });
+});
+
+describe("offersEditorLaunchers", () => {
+  const withoutEditor: ReadonlyArray<RemoteOpenState> = [
+    { mode: "local-exec" },
+    { mode: "remote-unavailable" },
+    { mode: "remote-links", host: { kind: "ssh-alias", host: "sol" } },
+  ];
+  const withEditor: RemoteOpenState = {
+    mode: "editor-url",
+    editor: "vscode",
+    urlTemplate: "https://app.example/ide#path={path}",
+    host: "chat-x7k2.cell.example.com",
+  };
+
+  it("leaves T3 Code's own launchers in place in its build", () => {
+    for (const state of [...withoutEditor, withEditor]) {
+      expect(offersEditorLaunchers(state, false)).toBe(true);
+    }
+  });
+
+  it("offers Awake's build the policy's page alone: none without limits.editor", () => {
+    for (const state of withoutEditor) {
+      expect(offersEditorLaunchers(state, true)).toBe(false);
+    }
+    expect(offersEditorLaunchers(withEditor, true)).toBe(true);
   });
 });
 

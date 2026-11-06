@@ -58,6 +58,7 @@ import {
 } from "~/terminal/ghostty/surface";
 import { type GhosttyColor, type GhosttyTheme } from "~/terminal/ghostty/core";
 import { useOpenInPreferredEditor } from "../editorPreferences";
+import { offersEditorLaunchers, useRemoteOpenState } from "../remoteOpen";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { isTerminalUrl } from "../terminal-links";
 import {
@@ -524,10 +525,14 @@ function TerminalSessionViewport({
   const hasTerminalWriteAccess = useEffectEvent(() =>
     readEnvironmentScope(environmentId, AuthTerminalOperateScope),
   );
-  const canOpenHostEditor = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  // A path opens in an editor, so where the build offers none, only URLs are links.
+  const editorLaunchers = offersEditorLaunchers(useRemoteOpenState(environmentId));
+  const canOperateHost = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const canOpenHostEditor = canOperateHost && editorLaunchers;
   const canActivateTerminalLink = useEffectEvent(
     (text: string) =>
-      isTerminalUrl(text) || readEnvironmentScope(environmentId, AuthOrchestrationOperateScope),
+      isTerminalUrl(text) ||
+      (editorLaunchers && readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)),
   );
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const openInPreferredEditor = useOpenInPreferredEditor(

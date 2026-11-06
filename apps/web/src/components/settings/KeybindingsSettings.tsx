@@ -38,6 +38,7 @@ import {
 import { isElectron } from "../../env";
 import { useOpenInPreferredEditor } from "../../editorPreferences";
 import { formatShortcutLabel } from "../../keybindings";
+import { offersEditorLaunchers, useRemoteOpenState } from "../../remoteOpen";
 import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";
 import { useSettingsScope } from "./SettingsScopeContext";
@@ -1334,6 +1335,9 @@ export function KeybindingsSettingsPanel() {
     primaryEnvironment?.environmentId ?? null,
     availableEditors,
   );
+  const editorLaunchers = offersEditorLaunchers(
+    useRemoteOpenState(primaryEnvironment?.environmentId ?? null),
+  );
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [savingCommand, setSavingCommand] = useState<KeybindingCommand | null>(null);
@@ -1483,23 +1487,25 @@ export function KeybindingsSettingsPanel() {
             <PlusIcon aria-hidden className="size-4" />
             Add keybinding
           </Button>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  disabled={!keybindingsConfigPath || !canOpenKeybindingsFile}
-                  onClick={openKeybindingsFile}
-                  aria-label="Open keybindings.json"
-                >
-                  <FileJsonIcon aria-hidden className="size-4" />
-                </Button>
-              }
-            />
-            <TooltipPopup side="top">Open keybindings.json</TooltipPopup>
-          </Tooltip>
+          {editorLaunchers ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!keybindingsConfigPath || !canOpenKeybindingsFile}
+                    onClick={openKeybindingsFile}
+                    aria-label="Open keybindings.json"
+                  >
+                    <FileJsonIcon aria-hidden className="size-4" />
+                  </Button>
+                }
+              />
+              <TooltipPopup side="top">Open keybindings.json</TooltipPopup>
+            </Tooltip>
+          ) : null}
         </div>
       </SettingsSection>
 
