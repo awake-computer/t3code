@@ -47,9 +47,13 @@ import { DraftInput } from "../ui/draft-input";
 import { SecretSourceInput, type SecretSource } from "./SecretSourceInput";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Switch } from "../ui/switch";
-import { ManagedControl, ManagedNotice } from "../ManagedPolicy";
-import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
-import { disallowedProviderMessage, isManagedDriverAllowed } from "@t3tools/contracts";
+import { ManagedNotice } from "../ManagedPolicy";
+import {
+  managedInstanceLocks,
+  providerUnavailableLine,
+  useManagedPolicy,
+} from "../../state/managedPolicy";
+import { APP_BASE_NAME, IS_AWAKE_BRAND } from "../../branding";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type {
@@ -688,6 +692,30 @@ interface ProviderInstanceCardProps {
     | undefined;
 }
 
+/**
+ * The list row's switch. Nothing can switch on a provider the policy forbids, so while one is off,
+ * the row says why in its place. One that is on keeps it: switching it off is the user's call.
+ */
+export function ProviderEnabledSwitch(props: {
+  readonly displayName: string;
+  readonly enabled: boolean;
+  readonly disabled: boolean;
+  readonly unavailable: string | undefined;
+  readonly onChange: (enabled: boolean) => void;
+}) {
+  if (!props.enabled && props.unavailable !== undefined) {
+    return <span className="text-xs text-muted-foreground">{props.unavailable}</span>;
+  }
+  return (
+    <Switch
+      checked={props.enabled}
+      disabled={props.disabled}
+      onCheckedChange={(checked) => props.onChange(Boolean(checked))}
+      aria-label={`Enable ${props.displayName}`}
+    />
+  );
+}
+
 const EMPTY_ACP_PROJECTS: NonNullable<ProviderInstanceCardProps["acpProjects"]> = [];
 const NO_SECRET_SOURCES: ReadonlyArray<SecretSource> = [];
 const NO_CUSTOM_MODELS: ReadonlyArray<CustomModelDefinition> = [];
@@ -772,12 +800,11 @@ export function ProviderInstanceCard({
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
   const managedPolicy = useManagedPolicy(environmentId);
   const instanceLocks = managedInstanceLocks(managedPolicy, instance.driver);
-  const managedDriverReason = isManagedDriverAllowed(managedPolicy, instance.driver)
-    ? undefined
-    : disallowedProviderMessage(
-        managedPolicy?.organization,
-        driverOption?.label ?? String(instance.driver),
-      );
+  const unavailableLine = providerUnavailableLine(
+    managedPolicy,
+    instance.driver,
+    IS_AWAKE_BRAND ? APP_BASE_NAME : undefined,
+  );
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({
@@ -1141,15 +1168,13 @@ export function ProviderInstanceCard({
               />
             </span>
           ) : null}
-          {/* The policy refuses switching it on; switching it off stays the user's call. */}
-          <ManagedControl reason={enabled ? undefined : managedDriverReason}>
-            <Switch
-              checked={enabled}
-              disabled={readOnly || (projectOverride !== undefined && !canWriteSettings)}
-              onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
-              aria-label={`Enable ${displayName}`}
-            />
-          </ManagedControl>
+          <ProviderEnabledSwitch
+            displayName={displayName}
+            enabled={enabled}
+            disabled={readOnly || (projectOverride !== undefined && !canWriteSettings)}
+            unavailable={unavailableLine}
+            onChange={updateEnabled}
+          />
         </span>
       </div>
     );

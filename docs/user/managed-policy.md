@@ -257,7 +257,8 @@ so restart T3 Code after that.
 (Antigravity), `fx` (fx), `kiro` (Kiro), `pi` (Pi), `muse` (Muse Code), and `acpRegistry` (ACP
 Registry).
 `t3 policy check` rejects an ID this version does not know. Threads on other providers stay,
-marked unavailable, and users can still turn those providers off.
+marked unavailable, and users can still turn those providers off. While one is off, Settings shows
+**Not allowed by** and your organization's name in place of the controls that would turn it on.
 
 `providers.instances` sets fields on every instance of a provider, such as an environment variable
 that routes Claude through Amazon Bedrock or a base URL for a company gateway. `binaryPath` and

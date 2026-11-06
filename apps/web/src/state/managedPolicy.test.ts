@@ -1,10 +1,11 @@
 import { ProviderDriverKind, type ManagedPolicySummary } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { managedInstanceLocks } from "./managedPolicy";
+import { managedInstanceLocks, providerUnavailableLine } from "./managedPolicy";
 
 const codex = ProviderDriverKind.make("codex");
 const claude = ProviderDriverKind.make("claudeAgent");
+const antigravity = ProviderDriverKind.make("antigravity");
 
 const policy: ManagedPolicySummary = {
   organization: "Example Corp",
@@ -41,5 +42,30 @@ describe("managedInstanceLocks", () => {
   it("locks nothing for drivers the policy does not pin, or without a policy", () => {
     expect(managedInstanceLocks(policy, claude)).toBeUndefined();
     expect(managedInstanceLocks(undefined, codex)).toBeUndefined();
+  });
+});
+
+describe("providerUnavailableLine", () => {
+  const onlyClaude: ManagedPolicySummary = {
+    ...policy,
+    limits: { providers: { allowedDrivers: [claude] } },
+  };
+
+  it("names who keeps a provider out: Awake for Antigravity in its build, else the org", () => {
+    expect(providerUnavailableLine(onlyClaude, antigravity, "Awake Chat")).toBe(
+      "Not available in Awake Chat",
+    );
+    expect(providerUnavailableLine(onlyClaude, codex, "Awake Chat")).toBe(
+      "Not allowed by Example Corp",
+    );
+    expect(providerUnavailableLine(onlyClaude, antigravity, undefined)).toBe(
+      "Not allowed by Example Corp",
+    );
+  });
+
+  it("says nothing of a provider the policy allows, or without a policy", () => {
+    expect(providerUnavailableLine(onlyClaude, claude, "Awake Chat")).toBeUndefined();
+    expect(providerUnavailableLine(policy, antigravity, "Awake Chat")).toBeUndefined();
+    expect(providerUnavailableLine(undefined, antigravity, "Awake Chat")).toBeUndefined();
   });
 });

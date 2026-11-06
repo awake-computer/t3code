@@ -24,7 +24,6 @@ import {
   type ProviderInstanceConfig,
   type ProviderInstanceId,
   type ServerProvider,
-  isManagedDriverAllowed,
   resolveEnvironmentMachineKind,
   resolveProjectProviderInstanceEnabled,
   resolveProviderInstanceEnabled,
@@ -92,7 +91,8 @@ import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
-import { useManagedPolicy } from "~/state/managedPolicy";
+import { providerUnavailableLine, useManagedPolicy } from "~/state/managedPolicy";
+import { APP_BASE_NAME, IS_AWAKE_BRAND } from "~/branding";
 import { ExpandableText } from "./ExpandableText";
 import { IntervalSecondsField } from "./IntervalSecondsField";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
@@ -1270,11 +1270,11 @@ function ProviderInstanceRow({
 }) {
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
-  const managedPolicy = useManagedPolicy(environmentId);
-  const notAllowed =
-    managedPolicy === undefined || isManagedDriverAllowed(managedPolicy, driver)
-      ? undefined
-      : `Not allowed by ${managedPolicy.organization}`;
+  const notAllowed = providerUnavailableLine(
+    useManagedPolicy(environmentId),
+    driver,
+    IS_AWAKE_BRAND ? APP_BASE_NAME : undefined,
+  );
   const acpProjects =
     mode === "editor" && liveProvider?.driver === "acpRegistry"
       ? allProjects.filter((project) => project.environmentId === environmentId)

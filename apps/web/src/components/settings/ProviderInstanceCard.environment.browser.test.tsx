@@ -2,7 +2,7 @@ import { userEvent } from "vite-plus/test/browser";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { render } from "../../../test/render";
-import { ProviderEnvironmentSection } from "./ProviderInstanceCard";
+import { ProviderEnabledSwitch, ProviderEnvironmentSection } from "./ProviderInstanceCard";
 
 const savedSecret = {
   name: "FAKE_API_KEY",
@@ -51,5 +51,31 @@ describe("ProviderEnvironmentSection saved secrets", () => {
       screen.getByRole("button", { name: "Remove environment variable RENAMED_KEY" }),
     );
     expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe("ProviderEnabledSwitch", () => {
+  it("says why in the switch's place while a provider the policy forbids is off", async () => {
+    const onChange = vi.fn();
+    const row = (enabled: boolean, unavailable: string | undefined) => (
+      <ProviderEnabledSwitch
+        displayName="Antigravity"
+        enabled={enabled}
+        disabled={false}
+        unavailable={unavailable}
+        onChange={onChange}
+      />
+    );
+    await using screen = await render(row(false, "Not available in Awake Chat"));
+    await expect.element(screen.getByText("Not available in Awake Chat")).toBeVisible();
+    expect(screen.container.querySelector('[role="switch"]')).toBeNull();
+
+    await screen.rerender(row(true, "Not available in Awake Chat"));
+    await userEvent.click(screen.getByRole("switch", { name: "Enable Antigravity" }));
+    expect(onChange).toHaveBeenLastCalledWith(false);
+
+    await screen.rerender(row(false, undefined));
+    await userEvent.click(screen.getByRole("switch", { name: "Enable Antigravity" }));
+    expect(onChange).toHaveBeenLastCalledWith(true);
   });
 });
