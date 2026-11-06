@@ -493,9 +493,7 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
         { urlTemplate: "https://ide.example/open" },
         { urlTemplate: "https://ide.example/open?path={path}", editor: "notepad" },
       ]) {
-        yield* loadFrom(JSON.stringify({ ...base, limits: { editor: invalid } })).pipe(
-          Effect.flip,
-        );
+        yield* loadFrom(JSON.stringify({ ...base, limits: { editor: invalid } })).pipe(Effect.flip);
       }
     }),
   );
