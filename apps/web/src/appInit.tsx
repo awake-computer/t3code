@@ -46,6 +46,7 @@ import {
 } from "./lib/windowControlsOverlay";
 import { startProviderAuthDelivery } from "./providerAuthDelivery";
 import { startAwakeConsoleBridge } from "./awakeConsole";
+import { installAwakeFonts } from "./awakeFonts";
 import { getRouter, type AppRouter } from "./router";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 import { primaryServerConfigAtom } from "./state/server";
@@ -213,6 +214,7 @@ export function startAppServices(): AppRouter {
 
   installDesktopPasteAsText(window.desktopBridge, window);
 
+  installAwakeFonts();
   startClientAppearance();
   startDocumentTitle(router);
   startEnvironmentThemeRepaint();

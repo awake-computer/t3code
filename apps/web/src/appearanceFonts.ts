@@ -10,12 +10,17 @@ import {
   MIN_PROMPT_FONT_SIZE,
 } from "@t3tools/contracts";
 
-export const DEFAULT_SANS_FONT_STACK =
-  '-apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", system-ui, sans-serif';
+import { IS_AWAKE_BRAND } from "./branding";
+
+// Awake's build leads with the fonts awakeFonts.ts bundles, NeuraMesh Sans and Geist Mono.
+export const DEFAULT_SANS_FONT_STACK = IS_AWAKE_BRAND
+  ? '"NeuraMesh Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
+  : '-apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", system-ui, sans-serif';
 
 // Some engines map `ui-monospace` to a proportional font, so prefer concrete names.
-export const DEFAULT_CODE_FONT_STACK =
-  '"SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
+export const DEFAULT_CODE_FONT_STACK = IS_AWAKE_BRAND
+  ? '"Geist Mono Variable", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
+  : '"SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
 
 export const TYPOGRAPHY_ADVANCED_STORAGE_KEY = "t3code:typography-advanced";
 

@@ -87,9 +87,25 @@ const WEB_ICON_SOURCE_PATHS_BY_BRAND = {
   },
 } as const satisfies Record<WebAssetBrand, Record<keyof typeof WEB_ICON_TARGET_FILENAMES, string>>;
 
-// Only a brand that renames the app replaces the web manifest; the others keep public/'s.
-const WEB_MANIFEST_SOURCE_PATHS_BY_BRAND: Partial<Record<WebAssetBrand, string>> = {
-  awake: BRAND_ASSET_PATHS.awakeWebManifest,
+// Only a brand that renames the app replaces the web manifest; the others keep public/'s. Awake's
+// also ships the licences of the fonts its client bundles beside them.
+interface ExtraWebFile {
+  readonly source: string;
+  readonly target: string;
+}
+
+const WEB_EXTRA_FILES_BY_BRAND: Partial<Record<WebAssetBrand, ReadonlyArray<ExtraWebFile>>> = {
+  awake: [
+    { source: BRAND_ASSET_PATHS.awakeWebManifest, target: "manifest.webmanifest" },
+    {
+      source: "assets/awake/fonts/neuramesh-sans/LICENSE-NeuraMeshSans-OFL.txt",
+      target: "LICENSE-NeuraMeshSans-OFL.txt",
+    },
+    {
+      source: "assets/awake/fonts/geist-mono/LICENSE-OFL.txt",
+      target: "LICENSE-GeistMono-OFL.txt",
+    },
+  ],
 };
 
 export function resolveWebIconOverrides(
@@ -97,16 +113,11 @@ export function resolveWebIconOverrides(
   targetDirectory: string,
 ): ReadonlyArray<IconOverride> {
   const sourcePaths = WEB_ICON_SOURCE_PATHS_BY_BRAND[brand];
-  const manifest = WEB_MANIFEST_SOURCE_PATHS_BY_BRAND[brand];
   return [
-    ...(manifest === undefined
-      ? []
-      : [
-          {
-            sourceRelativePath: manifest,
-            targetRelativePath: `${targetDirectory}/manifest.webmanifest`,
-          },
-        ]),
+    ...(WEB_EXTRA_FILES_BY_BRAND[brand] ?? []).map((file) => ({
+      sourceRelativePath: file.source,
+      targetRelativePath: `${targetDirectory}/${file.target}`,
+    })),
     {
       sourceRelativePath: sourcePaths.faviconIco,
       targetRelativePath: `${targetDirectory}/${WEB_ICON_TARGET_FILENAMES.faviconIco}`,
