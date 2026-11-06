@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
 import { useState } from "react";
 
+import { IS_AWAKE_BRAND } from "~/branding";
 import { environmentIdsKey } from "~/state/environmentAtomList";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { environmentUpdateStatesAtom } from "~/state/server";
@@ -70,7 +71,8 @@ export function useAutoBalanceUpdateBanner(
       },
     ];
   });
-  if (machines.length === 0) return null;
+  // Awake's build updates with its box's image, so it offers no server update.
+  if (IS_AWAKE_BRAND || machines.length === 0) return null;
 
   const running = machines.filter((machine) => machine.state.status === "running").length;
   const failed = machines.filter((machine) => machine.state.status === "failed").length;

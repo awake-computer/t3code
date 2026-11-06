@@ -12,8 +12,10 @@ import {
   getSettingsSearchTargetScope,
   getThreadAutoSettlementSearchAvailability,
   isSettingsSearchScopeAvailable,
+  keptInAwakeBuild,
   movedSettingsPath,
   searchSettings,
+  settingsNavGroupsFor,
   SETTINGS_NAV_GROUPS,
   SETTINGS_SEARCH_ITEMS,
   sourceControlHostSearchItems,
@@ -365,5 +367,29 @@ describe("movedSettingsPath", () => {
     expect(movedSettingsPath("/settings/projects", "project-defaults")).toBeNull();
     expect(movedSettingsPath("/settings/connections", "remote-environments")).toBeNull();
     expect(movedSettingsPath("/settings/appearance", "theme")).toBeNull();
+  });
+});
+
+describe("Awake's build", () => {
+  const navPaths = (awake: boolean) => settingsNavGroupsFor(awake).flatMap((group) => group.paths);
+
+  it("leaves pairing and T3 Connect out of the sidebar, and keeps every other page", () => {
+    expect(navPaths(false)).toContain("/settings/connections");
+    expect(navPaths(false)).toContain("/settings/access");
+    expect(navPaths(true)).not.toContain("/settings/connections");
+    expect(navPaths(true)).not.toContain("/settings/access");
+    const omitted = new Set(["/settings/connections", "/settings/access"]);
+    expect(navPaths(true)).toEqual(navPaths(false).filter((path) => !omitted.has(path)));
+    expect(settingsNavGroupsFor(true).every((group) => group.paths.length > 0)).toBe(true);
+  });
+
+  it("leaves out the rows that lead to guest links, linked environments and usage data", () => {
+    const kept = (id: string, to: SettingsSearchItem["to"]) => keptInAwakeBuild({ id, to });
+    expect(kept("guest-links", "/settings/labs")).toBe(false);
+    expect(kept("linked-environments-beta", "/settings/labs")).toBe(false);
+    expect(kept("privacy-policy", "/settings/about")).toBe(false);
+    expect(kept("network-access", "/settings/access")).toBe(false);
+    expect(kept("boring-sidebar", "/settings/labs")).toBe(true);
+    expect(kept("open-source-licenses", "/settings/about")).toBe(true);
   });
 });

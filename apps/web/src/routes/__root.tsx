@@ -13,7 +13,7 @@ import {
 import { Check, Copy } from "lucide";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
+import { APP_DISPLAY_NAME, APP_VERSION, IS_AWAKE_BRAND } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
@@ -203,7 +203,7 @@ function RootRouteBranch() {
         ) : null}
         {isElectron ? <RunningThreadKeepAlive /> : null}
         <RelayClientInstallDialog />
-        <ConnectOnboardingDialog />
+        {IS_AWAKE_BRAND ? null : <ConnectOnboardingDialog />}
         <SshPasswordPromptDialog />
         <SnapShotCoordinator />
         <ReopenClosedViewShortcut />

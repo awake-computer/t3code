@@ -2,6 +2,7 @@ import { useAuth } from "@clerk/react";
 import { Link } from "@tanstack/react-router";
 import { managedCapabilityDenial } from "@t3tools/contracts";
 
+import { IS_AWAKE_BRAND } from "~/branding";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 import { Button } from "../ui/button";
@@ -16,14 +17,16 @@ import { firstManagedDenial, usePrimaryManagedPolicy } from "~/state/managedPoli
 
 /** Features still settling in, and legacy behavior kept for people who rely on it. */
 export function LabsSettingsPanel() {
+  // Clerk is only mounted when this build has T3 Connect. Awake's build has neither guest links
+  // nor linked environments, which arrive through T3 Connect and pairing.
+  const guestLinks = hasCloudPublicConfig() ? <GuestLinksRowWithSignIn /> : <GuestLinksRow />;
   return (
     <SettingsPageContainer>
       <SettingsSection id="beta" title="Beta">
         <BoringSidebarRow />
         <BoringSidebarMultilineRow />
-        {/* Clerk is only mounted when this build has T3 Connect. */}
-        {hasCloudPublicConfig() ? <GuestLinksRowWithSignIn /> : <GuestLinksRow />}
-        <LinkedEnvironmentsRow />
+        {IS_AWAKE_BRAND ? null : guestLinks}
+        {IS_AWAKE_BRAND ? null : <LinkedEnvironmentsRow />}
         <SimlockHostsRow />
       </SettingsSection>
       <LegacyFeaturesSection />

@@ -1,4 +1,4 @@
-import { HOSTED_APP_CHANNEL } from "~/branding";
+import { HOSTED_APP_CHANNEL, IS_AWAKE_BRAND } from "~/branding";
 import { isElectron, isSecretsFeatureEnabled } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
@@ -110,11 +110,13 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/archived": "Archive",
 };
 
-/** Sidebar order. A group without a heading is set apart by space alone. */
-export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
+interface SettingsNavGroup {
   readonly heading: string | null;
   readonly paths: ReadonlyArray<SettingsPath>;
-}> = [
+}
+
+/** Sidebar order. A group without a heading is set apart by space alone. */
+const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
   {
     heading: null,
     paths: [
@@ -153,6 +155,37 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: ["/settings/maintenance", "/settings/labs", "/settings/about", "/settings/archived"],
   },
 ];
+
+/** The pages Awake's build leaves out: pairing, T3 Connect, and the environments they add. */
+export const AWAKE_OMITTED_SETTINGS_PATHS: ReadonlySet<SettingsPath> = new Set<SettingsPath>([
+  "/settings/connections",
+  "/settings/access",
+]);
+
+// Rows Awake's build leaves out of the pages it keeps: guest links and linked environments come
+// through T3 Connect and pairing, and T3 Code's privacy policy covers usage data it never sends.
+const AWAKE_OMITTED_SETTINGS_IDS: ReadonlySet<string> = new Set([
+  "guest-links",
+  "linked-environments-beta",
+  "privacy-policy",
+]);
+
+/** Whether Awake's build keeps a setting: on a page it keeps, and not a row it leaves out. */
+export function keptInAwakeBuild(item: Pick<SettingsSearchItem, "id" | "to">): boolean {
+  return !AWAKE_OMITTED_SETTINGS_PATHS.has(item.to) && !AWAKE_OMITTED_SETTINGS_IDS.has(item.id);
+}
+
+/** The sidebar's groups for a build, without the pages it leaves out or a group left empty. */
+export function settingsNavGroupsFor(awake: boolean): ReadonlyArray<SettingsNavGroup> {
+  const shown = (path: SettingsPath) => !awake || !AWAKE_OMITTED_SETTINGS_PATHS.has(path);
+  const groups = ALL_SETTINGS_NAV_GROUPS.map((group) => ({
+    ...group,
+    paths: group.paths.filter(shown),
+  }));
+  return groups.filter((group) => group.paths.length > 0);
+}
+
+export const SETTINGS_NAV_GROUPS = settingsNavGroupsFor(IS_AWAKE_BRAND);
 
 export function keybindingSearchAnchorId<Command extends KeybindingCommand>(command: Command) {
   return `keybinding-${command}` as const;
@@ -1350,6 +1383,7 @@ export function settingsForThisPlatform(
   return items.filter(
     (item) =>
       (isElectron || item.desktopOnly !== true) &&
+      (!IS_AWAKE_BRAND || keptInAwakeBuild(item)) &&
       (!item.releaseChannelOnly || isElectron || HOSTED_APP_CHANNEL !== null) &&
       (!item.secretsFeatureOnly || isSecretsFeatureEnabled) &&
       (!item.macOnly || isMacPlatform(platform)) &&

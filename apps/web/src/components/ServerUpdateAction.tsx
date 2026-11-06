@@ -32,6 +32,7 @@ import { useManagedPolicy } from "~/state/managedPolicy";
 import { environmentPresentations } from "~/state/presentation";
 import { ManagedControl } from "./ManagedPolicy";
 import { manualServerUpdateCommand } from "~/versionSkew";
+import { IS_AWAKE_BRAND } from "~/branding";
 import { crossesReleaseTrack } from "@t3tools/shared/cliRelease";
 import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
@@ -254,8 +255,13 @@ export function ServerUpdateProgress({
   );
 }
 
+/** Awake's build updates with its box's image, so it offers no self-update of its own. */
+export function ServerUpdateAction(props: ServerUpdateTarget & UpdateButtonProps) {
+  return IS_AWAKE_BRAND ? null : <ServerSelfUpdateAction {...props} />;
+}
+
 /** client-runtime owns self-updates so unmounting during reconnect preserves operation state. */
-export function ServerUpdateAction({
+function ServerSelfUpdateAction({
   environmentId,
   serverLabel,
   selfUpdate,

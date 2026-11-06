@@ -8,6 +8,7 @@ import { type ComponentProps, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { isElectron } from "../../env";
+import { IS_AWAKE_BRAND } from "../../branding";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
@@ -191,8 +192,9 @@ export async function installLocalUpdate(
   }
 }
 
+// Awake's build updates with its box's image, so the sidebar offers no update of its own.
 export function SidebarUpdatePill() {
-  return <SidebarUpdateControl />;
+  return IS_AWAKE_BRAND ? null : <SidebarUpdateControl />;
 }
 
 function SidebarUpdateControl() {

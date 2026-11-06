@@ -92,6 +92,8 @@ import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectLis
 import { presentSavedCloudEnvironmentConnection } from "../cloud/cloudEnvironmentConnectionPresentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { T3Wordmark } from "../T3Wordmark";
+import { AwakeMark } from "../AwakeMark";
+import { APP_BASE_NAME, IS_AWAKE_BRAND } from "../../branding";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CommandBlock } from "../CommandBlock";
@@ -111,7 +113,18 @@ type WizardStep = "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
-const ONBOARDING_STAGES = ["Connect", "Agents", "Projects"] as const;
+// Awake's build sets up the box it runs in: its first step, which connects other computers
+// through pairing and T3 Connect, and notes the usage data the build never sends, is left out.
+const FIRST_STEP: WizardStep = IS_AWAKE_BRAND ? "agents" : "connection";
+const ONBOARDING_STEPS: ReadonlyArray<WizardStep> = IS_AWAKE_BRAND
+  ? ["agents", "import"]
+  : ["connection", "agents", "import"];
+const ONBOARDING_STAGE_LABELS: Readonly<Record<WizardStep, string>> = {
+  connection: "Connect",
+  agents: "Agents",
+  import: "Projects",
+};
+const ONBOARDING_STAGES = ONBOARDING_STEPS.map((step) => ONBOARDING_STAGE_LABELS[step]);
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some projects or conversations may be missing.";
 
 export function WelcomeWizard({
@@ -123,7 +136,7 @@ export function WelcomeWizard({
   readonly resumeEnvironmentId?: EnvironmentId | undefined;
   readonly onDone: (projectRef?: ScopedProjectRef) => void | Promise<void>;
 }) {
-  const [step, setStep] = useState<WizardStep>(resumeEnvironmentId ? "agents" : "connection");
+  const [step, setStep] = useState<WizardStep>(resumeEnvironmentId ? "agents" : FIRST_STEP);
   const { environments } = useEnvironments();
   const [selection, setSelection] = useState<ReadonlySet<EnvironmentId> | null>(null);
   // Share the registry for the wizard's lifetime so unchecked computers are not auto-selected again.
@@ -158,7 +171,12 @@ export function WelcomeWizard({
   }, [autoSelectedComputers, environments]);
   const selectedIds =
     selection ?? new Set(primaryEnvironment ? [primaryEnvironment.environmentId] : []);
-  const scans = useProjectScans(step === "import" ? setupIds : NO_ENVIRONMENTS);
+  // With no step to choose computers, Awake's build sets up the one it runs in.
+  const stepIds =
+    IS_AWAKE_BRAND && setupIds.length === 0 && primaryEnvironment
+      ? [primaryEnvironment.environmentId]
+      : setupIds;
+  const scans = useProjectScans(step === "import" ? stepIds : NO_ENVIRONMENTS);
   const isLoadingProjects =
     step === "import" &&
     scans.every((scan) => scan.data === null) &&
@@ -168,7 +186,7 @@ export function WelcomeWizard({
     setSetupIds(ids);
     setStep("agents");
   };
-  const stageIndex = step === "agents" ? 1 : step === "import" ? 2 : 0;
+  const stageIndex = Math.max(0, ONBOARDING_STEPS.indexOf(step));
   const finish = (
     projectRef?: ScopedProjectRef,
     importWarning?: string,
@@ -239,14 +257,24 @@ export function WelcomeWizard({
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
         <WizardHeader
-          title="Set up T3 Code"
+          title={`Set up ${APP_BASE_NAME}`}
           identity={
-            <div className="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">
-              <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
-              <span className="text-2xl font-medium tracking-tight text-muted-foreground">
-                Code
-              </span>
-            </div>
+            IS_AWAKE_BRAND ? (
+              <div className="flex items-center gap-1.5" role="img" aria-label={APP_BASE_NAME}>
+                <AwakeMark className="size-6 shrink-0" />
+                <span className="text-2xl font-medium tracking-tight">awake</span>
+                <span className="text-2xl font-medium tracking-tight text-muted-foreground">
+                  chat
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">
+                <T3Wordmark className="h-4 w-auto shrink-0" aria-hidden />
+                <span className="text-2xl font-medium tracking-tight text-muted-foreground">
+                  Code
+                </span>
+              </div>
+            )
           }
         >
           <WizardSteps
@@ -255,7 +283,7 @@ export function WelcomeWizard({
             isStepDisabled={(index) => isImporting || index >= stageIndex}
             onStepChange={(index) => {
               if (isImporting || index > stageIndex) return;
-              setStep(index === 0 ? "connection" : "agents");
+              setStep(index === 0 ? FIRST_STEP : "agents");
             }}
           />
         </WizardHeader>
@@ -283,7 +311,7 @@ export function WelcomeWizard({
               }}
             />
           ) : step === "agents" ? (
-            <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
+            <AgentsStep environmentIds={stepIds} onContinue={() => setStep("import")} />
           ) : (
             <ImportStep
               scans={scans}
