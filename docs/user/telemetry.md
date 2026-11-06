@@ -15,7 +15,8 @@ raw provider events, or child-agent output.
 T3 Code also sends relay connection traces to Axiom to diagnose T3 Connect connectivity.
 
 To disable product events and relay tracing, set `T3CODE_TELEMETRY_ENABLED=false` in the server's
-environment before starting it. Relay tracing also stops when `T3CODE_OTEL_SDK_DISABLED` or
+environment before starting it. Awake's build, Awake Chat, sends neither unless that variable is
+`true`. Relay tracing also stops when `T3CODE_OTEL_SDK_DISABLED` or
 `OTEL_SDK_DISABLED` turns OpenTelemetry export off. The web app in a browser, including one the
 `t3` CLI opens, does not read these variables.
 
