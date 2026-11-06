@@ -2,6 +2,7 @@ import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
+import { IS_AWAKE_BRAND } from "~/branding";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn, isMacPlatform } from "~/lib/utils";
@@ -16,6 +17,10 @@ import {
   alternateComposerDispatchAction,
   resolveComposerDispatchMode,
 } from "@t3tools/client-runtime/state/composer-dispatch";
+
+// Awake's build names the button for what it does: it sends the message to the agent.
+const IDLE_SEND_LABEL = IS_AWAKE_BRAND ? "Send message" : "Submit message";
+const IDLE_SENDING_LABEL = IS_AWAKE_BRAND ? "Sending message" : "Submitting message";
 
 interface PendingActionState {
   questionIndex: number;
@@ -281,7 +286,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           ? "Queue message"
           : isRunning
             ? "Steer message"
-            : "Submit message";
+            : IDLE_SEND_LABEL;
   const submitStatus = isEnvironmentUnavailable
     ? "Environment disconnected"
     : (sendDisabledReason ??
@@ -290,7 +295,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         : isSendBusy
           ? isEditingQueuedMessage
             ? "Updating queued message"
-            : "Submitting message"
+            : IDLE_SENDING_LABEL
           : null));
   const submitTooltip =
     submitStatus ??

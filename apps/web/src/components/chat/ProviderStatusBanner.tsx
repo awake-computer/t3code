@@ -13,6 +13,19 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { RefreshIcon } from "../ui/refresh-icon";
+import { IS_AWAKE_BRAND } from "../../branding";
+import { CommandBlock } from "../CommandBlock";
+
+// In a box, each agent signs in with its own CLI in Terminal, never through Chat.
+const AWAKE_SIGN_IN_COMMANDS: Readonly<Record<string, string>> = {
+  claudeAgent: "claude",
+  codex: "codex login --device-auth",
+};
+
+/** The Terminal command that signs an agent in, where Awake's build names one. */
+export function awakeSignInCommand(driver: string, awake = IS_AWAKE_BRAND): string | undefined {
+  return awake ? AWAKE_SIGN_IN_COMMANDS[driver] : undefined;
+}
 
 function getIncompatibleVersion(status: ServerProvider) {
   const compatibility = status.compatibilityAdvisory;
@@ -79,6 +92,7 @@ export function getProviderStatusMessage(status: ServerProvider): string {
     return `Open provider setup to install ${formatProviderDriverKindLabel(status.driver)} on this environment.`;
   }
   if (status.auth.status === "unauthenticated") {
+    if (IS_AWAKE_BRAND) return `Sign in to ${providerName} in Terminal, then come back here.`;
     if (hasProviderSetup(status)) {
       return status.driver === "antigravity"
         ? "Open provider setup to sign in with Google."
@@ -138,6 +152,9 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   const message = incompatible?.message ?? getProviderStatusMessage(status);
   const isWarning =
     incompatible?.status !== "broken" && (status.status === "warning" || incompatible !== null);
+  const signInCommand = isUnauthenticated ? awakeSignInCommand(status.driver) : undefined;
+  // Awake's build signs agents in in Terminal, so it offers no provider setup for it.
+  const offersSetup = !(IS_AWAKE_BRAND && isUnauthenticated) && hasProviderSetup(status);
 
   return (
     <div className="pointer-events-auto mx-auto w-fit max-w-[calc(100%-2rem)] pt-3">
@@ -157,8 +174,9 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
                 {message}
               </TooltipPopup>
             </Tooltip>
+            {signInCommand === undefined ? null : <CommandBlock command={signInCommand} />}
             <div className="flex flex-wrap items-center justify-end gap-3">
-              {onOpenProviderSetup && hasProviderSetup(status) ? (
+              {onOpenProviderSetup && offersSetup ? (
                 <InlineButton onClick={() => onOpenProviderSetup(status.instanceId)}>
                   Open provider setup
                 </InlineButton>
