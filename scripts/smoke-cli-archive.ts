@@ -100,6 +100,7 @@ const smokeCliArchive = Effect.fn("smokeCliArchive")(function* (input: {
   const bundledLibatomic = path.join(contentDir, "lib/libatomic.so.1");
   for (const required of [
     executable,
+    path.join(contentDir, "LICENSE"),
     path.join(contentDir, "client/index.html"),
     ...(platform === "linux" ? [bundledLibatomic, `${bundledLibatomic}.LICENSE`] : []),
   ]) {
