@@ -87,7 +87,9 @@ jobs:
             exit 1
           fi
 
+      # Runs even when the check fails, so one run reports both.
       - name: Typecheck
+        if: ${{ !cancelled() }}
         run: vp run typecheck
 
   # The same package split and server shards as release.yml's test, test_web and test_server.
