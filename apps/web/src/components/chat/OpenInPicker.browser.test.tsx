@@ -218,6 +218,7 @@ describe("managed editor page", () => {
       label: "IDE",
     };
     await renderPicker(editors, true);
+    using _timers = fakeTimers();
     expect(document.querySelector('[aria-label="Choose editor"]')).toBeNull();
     await click(byLabel("Open in IDE"));
     expect(state.openPage).toHaveBeenCalledWith(
@@ -230,6 +231,11 @@ describe("managed editor page", () => {
     await act(async () => screen.rerender(<FavoriteEditorFallback />));
     expect((await pressOpenFavorite()).defaultPrevented).toBe(true);
     expect(state.openPage).toHaveBeenCalledWith(expect.stringContaining("path=%2Fwork%2Fproject"));
+    // The announcer's queue outlives a test, so speak it here and leave its regions empty.
+    await act(async () => vi.runAllTimers());
+    const regions = [...document.querySelectorAll('body > [aria-live="polite"]')];
+    expect(regions.map((region) => region.textContent).join("")).toContain("Opened in IDE");
+    for (const region of regions) region.textContent = "";
   });
 });
 
