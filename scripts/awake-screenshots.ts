@@ -43,6 +43,21 @@ const deepTextCheck = (text: string) => `(() => {
     [...root.querySelectorAll("*")].some((node) => node.shadowRoot !== null && has(node.shadowRoot));
   return has(document.body);
 })()`;
+// What a failed capture held in shadow roots, frames and canvases, which page text leaves out.
+const DEEP_DUMP = `(() => {
+  const parts = [];
+  const walk = (root) => {
+    for (const node of root.querySelectorAll("*")) {
+      if (node.shadowRoot === null) continue;
+      const text = (node.shadowRoot.textContent ?? "").replace(/\\s+/g, " ").slice(0, 200);
+      parts.push(node.tagName.toLowerCase() + ": " + text);
+      walk(node.shadowRoot);
+    }
+  };
+  walk(document);
+  const counts = ["iframe", "canvas"].map((tag) => tag + " " + document.querySelectorAll(tag).length);
+  return [counts.join(", "), ...parts].join("\\n").slice(0, 2500);
+})()`;
 
 const WIDTHS = [
   { width: 1440, height: 900 },
@@ -79,9 +94,15 @@ const serverEnv: Record<string, string> = {
   ...(process.env.GH_TOKEN ? { GH_TOKEN: process.env.GH_TOKEN } : {}),
 };
 
-// Pairing links and session tokens never reach an uploaded log.
+// Pairing tokens never reach a log: the server prints one on start, as text, in links and as a
+// QR code, whose rows are block characters.
 const redact = (text: string) =>
-  text.replace(/(token=|"credential": ?"|"token": ?")[^\s&#"]+/g, "$1<redacted>");
+  text
+    .replace(/^[\s▀-▟]*[▀-▟][\s▀-▟]*$/gmu, "")
+    .replace(
+      /(token=|token%3D|Token: |"credential": ?"|"token": ?")[^\s&#"%]+/giu,
+      "$1<redacted>",
+    );
 
 function run(command: string, args: ReadonlyArray<string>, cwd: string, env = baseEnv): string {
   const result = NodeChildProcess.spawnSync(command, args, {
@@ -327,14 +348,15 @@ t3(["project", "add", pullRequestRepo, "--title", "T3 Code"]);
 // As boxd does on a box's first chat: Awake's palettes, published as the theme "awake".
 t3(["theme", "set", NodePath.resolve(options.theme), "--id", "awake"]);
 
-const serverLog = NodeFS.openSync(NodePath.join(out, "server.log"), "w");
+// Kept whole and redacted once, so no token can straddle two chunks.
+const serverOutput: Array<string> = [];
 const server = NodeChildProcess.spawn(
   process.execPath,
   [T3, "serve", "--host", "127.0.0.1", "--port", options.port, "--no-browser"],
   { cwd: home, env: serverEnv, stdio: ["ignore", "pipe", "pipe"] },
 );
 for (const stream of [server.stdout, server.stderr]) {
-  stream.on("data", (chunk: Buffer) => NodeFS.writeSync(serverLog, redact(chunk.toString())));
+  stream.on("data", (chunk: Buffer) => serverOutput.push(chunk.toString()));
 }
 
 try {
@@ -406,6 +428,9 @@ try {
         });
         const page = await context.newPage();
         page.on("pageerror", (error) => pageErrors.push(redact(error.message)));
+        page.on("console", (message) => {
+          if (message.type() === "error") pageErrors.push(redact(message.text()));
+        });
         for (const view of capture) {
           const name = `${view.name}-${theme.name}-${String(viewport.width)}.png`;
           try {
@@ -419,7 +444,9 @@ try {
             const shown = await page
               .evaluate("document.body.innerText.slice(0, 1500)")
               .catch(() => "");
+            const deep = await page.evaluate(DEEP_DUMP).catch(() => "");
             console.error(`[awake-screenshots] ${page.url()} showed:\n${redact(String(shown))}`);
+            console.error(`[awake-screenshots] beneath it:\n${redact(String(deep))}`);
             await page
               .screenshot({ path: NodePath.join(out, `FAILED-${name}`) })
               .catch(() => undefined);
@@ -435,6 +462,7 @@ try {
   fail("seeding the server", error);
 } finally {
   server.kill("SIGTERM");
+  NodeFS.writeFileSync(NodePath.join(out, "server.log"), redact(serverOutput.join("")));
   const summary = { captured, failures, pageErrors };
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
@@ -444,5 +472,7 @@ console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");
   console.error(`[awake-screenshots] the server's last lines:\n${log.slice(-60).join("\n")}`);
+  const errors = [...new Set(pageErrors)].slice(0, 20);
+  console.error(`[awake-screenshots] the pages' errors:\n${errors.join("\n")}`);
   process.exitCode = 1;
 }
