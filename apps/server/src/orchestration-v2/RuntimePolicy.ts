@@ -1,5 +1,7 @@
 import {
   isRuntimeModeAbove,
+  type ManagedCodexRuntimeMode,
+  type ManagedPolicySummary,
   managedRuntimeModeCeilingMessage,
   ModelSelection,
   OrchestrationV2AppThread,
@@ -99,6 +101,26 @@ function providerRuntimeMode(
     : "approval-required";
 }
 
+// Codex's own names for a turn's sandbox; null overrides nothing, so the thread keeps Codex's.
+const CODEX_SANDBOX_POLICIES = {
+  "read-only": { type: "readOnly" },
+  "workspace-write": { type: "workspaceWrite" },
+  "danger-full-access": { type: "dangerFullAccess" },
+  config: null,
+} as const satisfies Record<NonNullable<ManagedCodexRuntimeMode["sandbox"]>, unknown>;
+
+/** What the policy has Codex run a turn in `runtimeMode` under, in place of T3 Code's own choice. */
+export function managedCodexTurnPolicy(
+  managedPolicy: ManagedPolicySummary | undefined,
+  runtimeMode: RuntimeMode,
+): { readonly approvalPolicy?: string; readonly sandboxPolicy?: unknown } {
+  const mode = managedPolicy?.limits?.providers?.runtimeModes?.codex?.[runtimeMode];
+  return {
+    ...(mode?.approvalPolicy === undefined ? {} : { approvalPolicy: mode.approvalPolicy }),
+    ...(mode?.sandbox === undefined ? {} : { sandboxPolicy: CODEX_SANDBOX_POLICIES[mode.sandbox] }),
+  };
+}
+
 const refuseAboveCeiling = (
   managedPolicy: ServerSettings.ServerSettingsService["Service"]["managedPolicy"],
   thread: OrchestrationV2AppThread,
@@ -184,11 +206,15 @@ export const layerFromProjectStore: Layer.Layer<
               }),
             ),
           ));
+        const runtimeMode = providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes);
         return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-          runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
+          runtimeMode,
           interactionMode: input.thread.interactionMode,
           cwd,
           ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
+          ...(instance?.driverKind === "codex"
+            ? managedCodexTurnPolicy(managedPolicy, runtimeMode)
+            : {}),
         });
       }),
     });

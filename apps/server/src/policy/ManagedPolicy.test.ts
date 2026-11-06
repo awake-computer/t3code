@@ -485,6 +485,26 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
       }),
   );
 
+  it.effect("tells clients the modes it gives Codex, and refuses one Codex cannot run", () =>
+    Effect.gen(function* () {
+      const base = { schemaVersion: 1, organization: "Example Corp" };
+      const withModes = (runtimeModes: unknown) =>
+        JSON.stringify({ ...base, limits: { providers: { runtimeModes } } });
+      const runtimeModes = {
+        codex: { "approval-required": { approvalPolicy: "on-request", sandbox: "config" } },
+      };
+      const policy = yield* loadFrom(withModes(runtimeModes));
+      assert.deepEqual(policy.summary?.limits, { providers: { runtimeModes } });
+      for (const invalid of [
+        { codex: { "approval-required": { approvalPolicy: "on-failure" } } },
+        { codex: { supervised: { sandbox: "config" } } },
+        { claudeAgent: { auto: { sandbox: "config" } } },
+      ]) {
+        yield* loadFrom(withModes(invalid)).pipe(Effect.flip);
+      }
+    }),
+  );
+
   it.effect("tells clients the page that opens files, and refuses one it cannot fill", () =>
     Effect.gen(function* () {
       const base = { schemaVersion: 1, organization: "Example Corp" };

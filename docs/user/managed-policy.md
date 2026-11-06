@@ -268,6 +268,28 @@ empty. A `codex` entry that is locked, or any `codex` entry under `maxRuntimeMod
 your fields. In the same way, an `opencode` entry like that rules out a server URL, so OpenCode
 starts the binary you set.
 
+`providers.runtimeModes.codex` sets what Codex runs a turn under in each permission mode, in place
+of T3 Code's own choice. A mode (`approval-required`, `auto-accept-edits`, `auto` or `full-access`)
+can set `approvalPolicy` (`untrusted`, `on-request` or `never`) and `sandbox` (`read-only`,
+`workspace-write`, `danger-full-access`, or `config`, which sends none, so the thread keeps the
+sandbox Codex's own configuration sets). A mode or field you leave out keeps T3 Code's choice. For
+example, this has Codex ask before it acts in Supervised, in the sandbox its configuration sets:
+
+```json
+{
+  "limits": {
+    "providers": {
+      "runtimeModes": {
+        "codex": { "approval-required": { "approvalPolicy": "on-request", "sandbox": "config" } }
+      }
+    }
+  }
+}
+```
+
+Codex refuses a turn whose approval policy or sandbox its own managed configuration does not allow,
+so allow the same values there.
+
 ### Updates
 
 - `mode`: `auto` keeps the normal update flow. `off` stops T3 Code from checking for updates, for

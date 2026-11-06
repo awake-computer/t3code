@@ -140,6 +140,11 @@ function summarizeLimits(
     editor,
   } = document.limits ?? {};
   const connect = ManagedLimits.allowsConnect({ document });
+  const providerSummary = {
+    ...(providers?.allowedDrivers === undefined ? {} : { allowedDrivers: providers.allowedDrivers }),
+    ...(Object.keys(lockedInstanceFields).length === 0 ? {} : { lockedInstanceFields }),
+    ...(providers?.runtimeModes === undefined ? {} : { runtimeModes: providers.runtimeModes }),
+  };
   return {
     ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
     ...(clients === undefined ? {} : { clients }),
@@ -147,16 +152,7 @@ function summarizeLimits(
     ...(webhookTasks === undefined ? {} : { webhookTasks }),
     ...(telemetry === undefined ? {} : { telemetry }),
     ...(browserCookieImport === undefined ? {} : { browserCookieImport }),
-    ...(providers?.allowedDrivers === undefined && Object.keys(lockedInstanceFields).length === 0
-      ? {}
-      : {
-          providers: {
-            ...(providers?.allowedDrivers === undefined
-              ? {}
-              : { allowedDrivers: providers.allowedDrivers }),
-            ...(Object.keys(lockedInstanceFields).length === 0 ? {} : { lockedInstanceFields }),
-          },
-        }),
+    ...(Object.keys(providerSummary).length === 0 ? {} : { providers: providerSummary }),
     ...(updates === undefined
       ? {}
       : {

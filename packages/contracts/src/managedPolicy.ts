@@ -34,10 +34,37 @@ export const ManagedProviderInstance = Schema.Struct({
 });
 export type ManagedProviderInstance = typeof ManagedProviderInstance.Type;
 
+/**
+ * In place of T3 Code's own choice for a mode: Codex's approval policy for the turn, its sandbox, or
+ * both. Sandbox `config` sends none, so the thread keeps Codex's own, from its configuration unless
+ * an earlier turn set one.
+ */
+export const ManagedCodexRuntimeMode = Schema.Struct({
+  approvalPolicy: Schema.optionalKey(Schema.Literals(["untrusted", "on-request", "never"])),
+  sandbox: Schema.optionalKey(
+    Schema.Literals(["read-only", "workspace-write", "danger-full-access", "config"]),
+  ),
+});
+export type ManagedCodexRuntimeMode = typeof ManagedCodexRuntimeMode.Type;
+
+/** Per permission mode, what a provider's turns run under. A mode left out keeps T3 Code's choice. */
+export const ManagedProviderRuntimeModes = Schema.Struct({
+  codex: Schema.optionalKey(
+    Schema.Struct({
+      "approval-required": Schema.optionalKey(ManagedCodexRuntimeMode),
+      "auto-accept-edits": Schema.optionalKey(ManagedCodexRuntimeMode),
+      auto: Schema.optionalKey(ManagedCodexRuntimeMode),
+      "full-access": Schema.optionalKey(ManagedCodexRuntimeMode),
+    }),
+  ),
+});
+export type ManagedProviderRuntimeModes = typeof ManagedProviderRuntimeModes.Type;
+
 export const ManagedProviderLimits = Schema.Struct({
   /** Only these drivers run; instances of any other driver show as unavailable. */
   allowedDrivers: Schema.optionalKey(Schema.NonEmptyArray(ProviderDriverKind)),
   instances: Schema.optionalKey(Schema.Record(ProviderDriverKind, ManagedProviderInstance)),
+  runtimeModes: Schema.optionalKey(ManagedProviderRuntimeModes),
 });
 export type ManagedProviderLimits = typeof ManagedProviderLimits.Type;
 
@@ -143,6 +170,7 @@ export const ManagedPolicySummaryLimits = Schema.Struct({
       lockedInstanceFields: Schema.optionalKey(
         Schema.Record(ProviderDriverKind, Schema.Array(Schema.String)),
       ),
+      runtimeModes: Schema.optionalKey(ManagedProviderRuntimeModes),
     }),
   ),
   /** No `feedUrl`: it can carry a token, and only the desktop app, which reads the file, uses it. */

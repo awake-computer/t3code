@@ -4,6 +4,7 @@ import {
   type ModelSelection,
   type OrchestrationV2AppThread,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
   type RuntimeMode,
   type ServerProvider,
@@ -71,6 +72,7 @@ const supportedRuntimeModesByInstance = new Map<ProviderInstanceId, ReadonlyArra
 ]);
 const providerInstanceFor = (instanceId: ProviderInstanceId) =>
   ({
+    driverKind: ProviderDriverKind.make(instanceId),
     snapshot: {
       getSnapshot: Effect.succeed({
         supportedRuntimeModes: supportedRuntimeModesByInstance.get(instanceId),
@@ -184,6 +186,49 @@ it.layer(
       const allowed = yield* resolve("auto-accept-edits");
       assert.equal(allowed.runtimeMode, "auto-accept-edits");
       assert.equal(allowed.maxRuntimeMode, "auto-accept-edits");
+    }),
+  );
+});
+
+it.layer(
+  layerWithPolicy({
+    organization: "Example Corp",
+    lockedSettings: [],
+    limits: {
+      providers: {
+        runtimeModes: {
+          codex: {
+            "approval-required": { approvalPolicy: "on-request", sandbox: "config" },
+            "auto-accept-edits": { sandbox: "danger-full-access" },
+          },
+        },
+      },
+    },
+  }),
+)("RuntimePolicyV2 under the policy's Codex modes", (it) => {
+  it.effect("runs Codex under each mode's approval policy and sandbox from the policy", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const resolve = (runtimeMode: RuntimeMode, instanceId = providerInstanceId) =>
+        policy.resolve({
+          thread: makeThread({ now, worktreePath: "/work", runtimeMode }),
+          modelSelection: { instanceId, model: "test-model" },
+        });
+
+      const supervised = yield* resolve("approval-required");
+      assert.equal(supervised.approvalPolicy, "on-request");
+      // Null sends no sandbox, so Codex keeps the one its configuration sets.
+      assert.isNull(supervised.sandboxPolicy);
+      const edits = yield* resolve("auto-accept-edits");
+      assert.isUndefined(edits.approvalPolicy);
+      assert.deepEqual(edits.sandboxPolicy, { type: "dangerFullAccess" });
+      const full = yield* resolve("full-access");
+      assert.isUndefined(full.approvalPolicy);
+      assert.isUndefined(full.sandboxPolicy);
+      const grok = yield* resolve("approval-required", grokInstanceId);
+      assert.isUndefined(grok.approvalPolicy);
+      assert.isUndefined(grok.sandboxPolicy);
     }),
   );
 });
