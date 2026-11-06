@@ -114,6 +114,7 @@ interface SectionOptions {
   provider?: ServerProvider;
   enabled?: boolean;
   binaryPath?: string;
+  notAllowed?: string;
 }
 
 function section(options: SectionOptions = {}) {
@@ -127,6 +128,7 @@ function section(options: SectionOptions = {}) {
       enabled={options.enabled ?? true}
       readOnly={options.readOnly ?? false}
       onEnable={vi.fn()}
+      notAllowed={options.notAllowed}
     />
   );
 }
@@ -181,6 +183,20 @@ function resetSetup() {
 }
 
 describe("Antigravity setup", () => {
+  it("offers nothing the policy forbids, and says who forbids it", async () => {
+    resetSetup();
+    const { setup: _setup, ...unprobed } = provider;
+    await using screen = await renderSetup({
+      enabled: false,
+      provider: unprobed,
+      notAllowed: "Not allowed by Example Corp",
+    });
+
+    expect(screen.occurrences("Not allowed by Example Corp")).toBe(1);
+    expect(screen.button("Enable Antigravity")).toBeNull();
+    expect(screen.occurrences("Update required")).toBe(0);
+  });
+
   it("can start installation before the first install snapshot arrives", async () => {
     resetSetup();
     setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });

@@ -24,6 +24,7 @@ import {
   type ProviderInstanceConfig,
   type ProviderInstanceId,
   type ServerProvider,
+  isManagedDriverAllowed,
   resolveEnvironmentMachineKind,
   resolveProjectProviderInstanceEnabled,
   resolveProviderInstanceEnabled,
@@ -1269,6 +1270,11 @@ function ProviderInstanceRow({
 }) {
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
+  const managedPolicy = useManagedPolicy(environmentId);
+  const notAllowed =
+    managedPolicy === undefined || isManagedDriverAllowed(managedPolicy, driver)
+      ? undefined
+      : `Not allowed by ${managedPolicy.organization}`;
   const acpProjects =
     mode === "editor" && liveProvider?.driver === "acpRegistry"
       ? allProjects.filter((project) => project.environmentId === environmentId)
@@ -1343,6 +1349,7 @@ function ProviderInstanceRow({
             enabled={resolveProviderInstanceEnabled(instance)}
             readOnly={readOnly}
             onEnable={() => actions.enableInstance(instanceId, { ...instance, enabled: true })}
+            notAllowed={notAllowed}
           />
         ) : mode === "editor" && codexSetupMode === "managed" ? (
           <CodexSetupSection

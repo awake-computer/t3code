@@ -33,6 +33,8 @@ interface ProviderSetupSectionProps {
   readonly enabled: boolean;
   readonly readOnly: boolean;
   readonly onEnable: () => void;
+  /** Set when the policy forbids the provider: nothing here can run it, so nothing offers to. */
+  readonly notAllowed?: string | undefined;
 }
 
 export function readAntigravityAuthMethod(config: unknown): AntigravityAuthMethod {
@@ -60,7 +62,7 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
             <span className="text-muted-foreground [overflow-wrap:anywhere]">
               {props.environmentLabel}
             </span>
-            {!props.enabled && !props.readOnly ? (
+            {!props.enabled && !props.readOnly && props.notAllowed === undefined ? (
               <Button size="sm" variant="outline" onClick={props.onEnable}>
                 Enable Antigravity
               </Button>
@@ -68,7 +70,9 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
           </div>
         }
       />
-      {props.readOnly ? (
+      {props.notAllowed !== undefined ? (
+        <SettingsRow title={props.notAllowed} />
+      ) : props.readOnly ? (
         <SettingsRow title="Setup unavailable" description="Provider setup is read-only." />
       ) : props.provider?.setup === undefined ? (
         <SettingsRow
