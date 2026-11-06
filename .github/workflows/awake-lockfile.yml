@@ -9,6 +9,7 @@ on:
   push:
     branches: [awake]
     paths:
+      - .github/workflows/awake-lockfile.yml
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - .pnpmfile.cjs
@@ -33,7 +34,7 @@ jobs:
           install: "false"
 
       - name: Update the lockfile
-        run: vp pm install --lockfile-only --no-frozen-lockfile
+        run: vp install --lockfile-only --no-frozen-lockfile
 
       - name: Print the lockfile's patch
         shell: bash
