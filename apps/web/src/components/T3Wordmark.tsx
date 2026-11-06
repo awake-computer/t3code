@@ -1,6 +1,10 @@
 import type { SVGProps } from "react";
 
+import { IS_AWAKE_BRAND } from "../branding";
+import { AwakeMark } from "./AwakeMark";
+
 export function T3Wordmark(props: SVGProps<SVGSVGElement>) {
+  if (IS_AWAKE_BRAND) return <AwakeMark {...props} />;
   return (
     <svg {...props} viewBox="15.5309 37 94.3941 56.96" xmlns="http://www.w3.org/2000/svg">
       <path

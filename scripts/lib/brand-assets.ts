@@ -29,9 +29,16 @@ export const BRAND_ASSET_PATHS = {
   developmentWebFavicon16Png: "assets/dev/blueprint-web-favicon-16x16.png",
   developmentWebFavicon32Png: "assets/dev/blueprint-web-favicon-32x32.png",
   developmentWebAppleTouchIconPng: "assets/dev/blueprint-web-apple-touch-180.png",
+
+  // Awake's build (awake-computer/t3code), drawn from Awake's mark in assets/awake/awake-mark.svg.
+  awakeWebFaviconIco: "assets/awake/awake-web-favicon.ico",
+  awakeWebFavicon16Png: "assets/awake/awake-web-favicon-16x16.png",
+  awakeWebFavicon32Png: "assets/awake/awake-web-favicon-32x32.png",
+  awakeWebAppleTouchIconPng: "assets/awake/awake-web-apple-touch-180.png",
+  awakeWebManifest: "assets/awake/manifest.webmanifest",
 } as const;
 
-export type WebAssetBrand = "development" | "nightly" | "production";
+export type WebAssetBrand = "development" | "nightly" | "production" | "awake";
 
 export const WEB_ASSET_CHANNELS = ["latest", "nightly"] as const;
 
@@ -72,14 +79,34 @@ const WEB_ICON_SOURCE_PATHS_BY_BRAND = {
     favicon32Png: BRAND_ASSET_PATHS.productionWebFavicon32Png,
     appleTouchIconPng: BRAND_ASSET_PATHS.productionWebAppleTouchIconPng,
   },
+  awake: {
+    faviconIco: BRAND_ASSET_PATHS.awakeWebFaviconIco,
+    favicon16Png: BRAND_ASSET_PATHS.awakeWebFavicon16Png,
+    favicon32Png: BRAND_ASSET_PATHS.awakeWebFavicon32Png,
+    appleTouchIconPng: BRAND_ASSET_PATHS.awakeWebAppleTouchIconPng,
+  },
 } as const satisfies Record<WebAssetBrand, Record<keyof typeof WEB_ICON_TARGET_FILENAMES, string>>;
+
+// Only a brand that renames the app replaces the web manifest; the others keep public/'s.
+const WEB_MANIFEST_SOURCE_PATHS_BY_BRAND: Partial<Record<WebAssetBrand, string>> = {
+  awake: BRAND_ASSET_PATHS.awakeWebManifest,
+};
 
 export function resolveWebIconOverrides(
   brand: WebAssetBrand,
   targetDirectory: string,
 ): ReadonlyArray<IconOverride> {
   const sourcePaths = WEB_ICON_SOURCE_PATHS_BY_BRAND[brand];
+  const manifest = WEB_MANIFEST_SOURCE_PATHS_BY_BRAND[brand];
   return [
+    ...(manifest === undefined
+      ? []
+      : [
+          {
+            sourceRelativePath: manifest,
+            targetRelativePath: `${targetDirectory}/manifest.webmanifest`,
+          },
+        ]),
     {
       sourceRelativePath: sourcePaths.faviconIco,
       targetRelativePath: `${targetDirectory}/${WEB_ICON_TARGET_FILENAMES.faviconIco}`,

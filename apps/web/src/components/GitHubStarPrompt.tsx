@@ -3,6 +3,7 @@ import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import { StarIcon } from "lucide-react";
 
+import { IS_AWAKE_BRAND } from "../branding";
 import { getLocalStorageItem, setLocalStorageItem } from "../hooks/useLocalStorage";
 import { readLocalApi } from "../localApi";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -143,7 +144,8 @@ async function starRepository(environmentId: EnvironmentId) {
  * unless the environment's GitHub account already starred the repo. Waits until the user is idle.
  */
 export async function recordPromptSent(environmentId: EnvironmentId): Promise<void> {
-  if (shownThisSession) return;
+  // Awake's build names neither T3 Code nor its repository, so it asks for no star.
+  if (IS_AWAKE_BRAND || shownThisSession) return;
   try {
     if (getLocalStorageItem(DISMISSED_KEY, Schema.Boolean)) return;
     const sent = (getLocalStorageItem(SENT_KEY, Schema.Number) ?? 0) + 1;

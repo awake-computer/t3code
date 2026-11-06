@@ -225,10 +225,12 @@ jobs:
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
-      # Builds in other repositories report "dev" telemetry, as release.yml has it.
+      # Builds in other repositories report "dev" telemetry, as release.yml has it. T3CODE_BRAND
+      # names the web client Awake Code, with Awake's mark on its splash.
       - name: Build JS bundle
         env:
           T3CODE_TELEMETRY_CHANNEL: dev
+          T3CODE_BRAND: awake
         run: vp run --filter t3 build
 
       - name: Upload JS bundle
@@ -328,8 +330,9 @@ jobs:
         if: steps.resource_monitor_cache.outputs.cache-hit != 'true'
         run: cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target "${{ matrix.rust_target }}"
 
+      # Awake's favicons and web manifest over the client the bundle built.
       - name: Apply web client branding
-        run: node scripts/apply-web-brand-assets.ts production apps/server/dist/client
+        run: node scripts/apply-web-brand-assets.ts awake apps/server/dist/client
 
       - name: Build CLI single-executable
         env:
