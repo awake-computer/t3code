@@ -1,0 +1,51 @@
+name: Awake lockfile
+
+# Writes the pnpm-lock.yaml that awake's package.json files and pnpm-workspace.yaml ask for, with
+# the pnpm the repository pins, and prints any change as a gzipped, base64-encoded patch between
+# two marker lines. It writes nothing back: whoever pushed applies the patch in a commit of their
+# own, which the release workflow then checks with a frozen install.
+
+on:
+  push:
+    branches: [awake]
+    paths:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .pnpmfile.cjs
+      - "**/package.json"
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    name: Update pnpm-lock.yaml
+    if: github.repository == 'awake-computer/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Setup Vite+
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install: "false"
+
+      - name: Update the lockfile
+        run: vp pm install --lockfile-only --no-frozen-lockfile
+
+      - name: Print the lockfile's patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "pnpm-lock.yaml is up to date."
+            exit 0
+          fi
+          git diff --stat -- pnpm-lock.yaml
+          echo "----- BEGIN LOCKFILE PATCH -----"
+          git diff -- pnpm-lock.yaml | gzip -9 | base64 -w 76
+          echo "----- END LOCKFILE PATCH -----"
+          echo "::error::pnpm-lock.yaml is out of date on awake; commit the patch above."
+          exit 1
