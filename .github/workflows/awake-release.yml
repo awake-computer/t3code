@@ -78,8 +78,14 @@ jobs:
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
 
+      # On a failure, the formatter's own fix is printed as a diff, so it can be applied by hand.
       - name: Check
-        run: vp check
+        run: |
+          if ! vp check; then
+            vp fmt >/dev/null 2>&1 || true
+            git --no-pager diff
+            exit 1
+          fi
 
       - name: Typecheck
         run: vp run typecheck
