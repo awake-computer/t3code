@@ -3,8 +3,8 @@
  * Fails unless every package in an unpacked CLI archive's node_modules was published on npm at or
  * before --published-before: Awake's 14-day rule for the runtime install, checked on what shipped.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 
 interface Installed {
   readonly name: string;
@@ -21,26 +21,26 @@ function option(flag: string): string {
 }
 
 function packageDirectories(modules: string, entry: string): ReadonlyArray<string> {
-  if (!entry.startsWith("@")) return [join(modules, entry)];
-  const scope = join(modules, entry);
-  const scoped = readdirSync(scope, { withFileTypes: true });
-  return scoped.filter((dirent) => dirent.isDirectory()).map((dirent) => join(scope, dirent.name));
+  if (!entry.startsWith("@")) return [NodePath.join(modules, entry)];
+  const scope = NodePath.join(modules, entry);
+  const scoped = NodeFS.readdirSync(scope, { withFileTypes: true }).filter((d) => d.isDirectory());
+  return scoped.map((dirent) => NodePath.join(scope, dirent.name));
 }
 
 function collect(modules: string, found: Map<string, Installed>): void {
-  if (!existsSync(modules)) return;
-  for (const entry of readdirSync(modules, { withFileTypes: true })) {
+  if (!NodeFS.existsSync(modules)) return;
+  for (const entry of NodeFS.readdirSync(modules, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     for (const dir of packageDirectories(modules, entry.name)) {
-      const manifestPath = join(dir, "package.json");
-      if (existsSync(manifestPath)) {
-        const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
-        const { name, version } = manifest;
+      const manifestPath = NodePath.join(dir, "package.json");
+      if (NodeFS.existsSync(manifestPath)) {
+        const text = NodeFS.readFileSync(manifestPath, "utf8");
+        const { name, version } = JSON.parse(text) as Record<string, unknown>;
         if (typeof name === "string" && typeof version === "string") {
           found.set(`${name}@${version}`, { name, version });
         }
       }
-      collect(join(dir, "node_modules"), found);
+      collect(NodePath.join(dir, "node_modules"), found);
     }
   }
 }
@@ -59,8 +59,8 @@ const limit = Date.parse(option("--published-before"));
 if (Number.isNaN(limit)) throw new Error(USAGE);
 
 const found = new Map<string, Installed>();
-for (const entry of readdirSync(root, { withFileTypes: true })) {
-  if (entry.isDirectory()) collect(join(root, entry.name, "node_modules"), found);
+for (const entry of NodeFS.readdirSync(root, { withFileTypes: true })) {
+  if (entry.isDirectory()) collect(NodePath.join(root, entry.name, "node_modules"), found);
 }
 // An empty list means the wrong directory, not a clean archive.
 if (found.size === 0) throw new Error(`No packages under ${root}/*/node_modules.`);
