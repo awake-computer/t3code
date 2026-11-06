@@ -1,4 +1,4 @@
-import type { RuntimeMode } from "@t3tools/contracts";
+import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
 import { type ReactNode, useRef, useState } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -13,9 +13,18 @@ import {
   useComposerMenuProps,
 } from "./composerEventScope";
 import { ComposerFooterModeControls, ComposerPermissionsSection } from "./ComposerFooterControls";
-import { runtimeModeConfig, runtimeModeOptions } from "./runtimeModeConfig";
+import {
+  resolveRuntimeModeOptions,
+  runtimeModeConfig,
+  runtimeModeOptions,
+} from "./runtimeModeConfig";
 
 const options = runtimeModeOptions.map((mode) => ({ mode, ...runtimeModeConfig[mode] }));
+const supervisedOnly: ManagedPolicySummary = {
+  organization: "Example Corp",
+  lockedSettings: [],
+  limits: { maxRuntimeMode: "approval-required" },
+};
 
 // Mirrors the overflow menu: mode radio items first, then the Permissions section.
 function OverflowMenu() {
@@ -86,6 +95,34 @@ it("marks the current mode as checked and closes on Escape", async () => {
   await userEvent.keyboard("{Escape}");
   await expect.element(fullAccess).not.toBeInTheDocument();
   await expect.element(screen.getByRole("button", { name: "More" })).toHaveFocus();
+});
+
+function CeilingMenu() {
+  const [mode, setMode] = useState<RuntimeMode>("approval-required");
+  const composerMenuProps = useComposerMenuProps();
+  return (
+    <Menu>
+      <MenuTrigger>More</MenuTrigger>
+      <MenuPopup {...composerMenuProps}>
+        <ComposerPermissionsSection
+          runtimeMode={mode}
+          runtimeModeOptions={resolveRuntimeModeOptions(runtimeModeOptions, supervisedOnly)}
+          onRuntimeModeChange={setMode}
+        />
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+it("names who keeps a mode above the ceiling out, in place of its description", async () => {
+  await using screen = await render(<CeilingMenu />, { router: false }); // no routes involved
+  await userEvent.click(screen.getByRole("button", { name: "More" }));
+  await expect
+    .element(page.getByRole("menuitemradio", { name: "Full access" }))
+    .toHaveAccessibleDescription("Not allowed by Example Corp");
+  await expect
+    .element(page.getByRole("menuitemradio", { name: "Supervised" }))
+    .toHaveAccessibleDescription("Ask before commands and file changes.");
 });
 
 // The real composer menu focus rule (useComposerMenuProps), with a stub composer handle.

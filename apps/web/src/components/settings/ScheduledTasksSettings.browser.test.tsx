@@ -47,7 +47,12 @@ const threadFamilyRead = {
   threads: [{ id: task.threadId, title: "Fix login bug" }],
 };
 
-const state = vi.hoisted(() => ({ connected: true, tasksLoaded: true, secondary: false }));
+const state = vi.hoisted(() => ({
+  connected: true,
+  tasksLoaded: true,
+  secondary: false,
+  webhooksOff: false,
+}));
 const secondaryId = EnvironmentId.make("secondary");
 const permissions = new Map<string, Atom.Writable<boolean>>();
 
@@ -55,6 +60,7 @@ function setup() {
   state.connected = true;
   state.tasksLoaded = true;
   state.secondary = false;
+  state.webhooksOff = false;
   permissions.clear();
   permissions.set(environmentId, Atom.make(true));
   permissions.set(secondaryId, Atom.make(true));
@@ -144,6 +150,13 @@ vi.mock(import("../../hooks/useSettings"), async (original) => ({
   ...(await original()),
   useEnvironmentSettings: (() => DEFAULT_UNIFIED_SETTINGS) as never,
 }));
+vi.mock(import("../../state/managedPolicy"), async (original) => ({
+  ...(await original()),
+  useManagedPolicy: (() =>
+    state.webhooksOff
+      ? { organization: "Example Corp", lockedSettings: [], limits: { webhookTasks: false } }
+      : undefined) as never,
+}));
 
 describe("ScheduledTasksSettings", () => {
   it("creates on a permitted secondary and reacts to permission changes", async () => {
@@ -180,6 +193,21 @@ describe("ScheduledTasksSettings", () => {
     state.connected = false;
     await using screen = await render(<ScheduledTasksSettings />);
     await expect.element(screen.getByRole("button", { name: "New task" })).toBeDisabled();
+  });
+
+  it("says why in place of the webhook choice when the policy refuses webhooks", async () => {
+    setup();
+    state.webhooksOff = true;
+    await using screen = await render(<ScheduledTasksSettings />);
+    await screen.getByRole("button", { name: "New task" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect.element(dialog.getByRole("button", { name: "Every interval" })).toBeVisible();
+    await expect
+      .element(dialog.getByText("Webhook tasks are not allowed by Example Corp."))
+      .toBeVisible();
+    await expect
+      .element(dialog.getByRole("button", { name: "On webhook" }))
+      .not.toBeInTheDocument();
   });
 
   it("keeps a linked task's unsaved edits across a disconnect and reconnect", async () => {

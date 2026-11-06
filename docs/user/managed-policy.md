@@ -188,7 +188,9 @@ A few settings need care:
 `approval-required` (Supervised), `auto-accept-edits`, `auto`, or `full-access`. It covers threads
 that users start, agents start, and scheduled tasks start. A thread already above the limit cannot
 run another turn until someone lowers its mode; its queued messages send once that happens. New
-threads start at the limit when the user's default is above it.
+threads start at the limit when the user's default is above it. Modes above the limit stay listed,
+each reading **Not allowed by** and your organization's name, and a thread already above it says
+which of its modes is not allowed, with a button that switches it to the broadest one left.
 
 With `maxRuntimeMode` set, you own each provider's launch settings: binary path, launch arguments,
 config home, and the environment variables set on each provider. They come from
@@ -243,7 +245,10 @@ so restart T3 Code after that.
 ### Other capabilities
 
 - `webhookTasks: false`: scheduled tasks cannot use webhook triggers. Existing webhook tasks stay
-  but do not run, and cannot be turned back on. Users can still edit or delete them.
+  but do not run, and cannot be turned back on. Users can still edit or delete them. A task's
+  **On webhook** choice gives way to a line saying webhook tasks are not allowed by your
+  organization, or, in Awake Chat, which keeps webhooks out of every box, not available in Awake
+  Chat.
 - `browserCookieImport: false`: users cannot import cookies from another browser into T3 Code's
   browser.
 - `telemetry: false`: the server and desktop app send no [product usage data](./telemetry.md) or

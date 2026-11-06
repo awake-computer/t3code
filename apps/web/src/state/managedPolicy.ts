@@ -1,8 +1,10 @@
 import {
   isManagedDriverAllowed,
+  isRuntimeModeAbove,
   type EnvironmentId,
   type ManagedPolicySummary,
   type ProviderDriverKind,
+  type RuntimeMode,
 } from "@t3tools/contracts";
 
 import { useServerConfigs } from "./entities";
@@ -51,6 +53,42 @@ export function providerUnavailableLine(
   return awakeApp !== undefined && OUT_OF_AWAKE_DRIVERS.has(driver)
     ? `Not available in ${awakeApp}`
     : `Not allowed by ${policy.organization}`;
+}
+
+/** What a mode above the policy's ceiling reads where it is offered, or undefined when allowed. */
+export function runtimeModeUnavailableLine(
+  policy: ManagedPolicySummary | undefined,
+  mode: RuntimeMode,
+): string | undefined {
+  return policy !== undefined && isRuntimeModeAbove(mode, policy.limits?.maxRuntimeMode)
+    ? `Not allowed by ${policy.organization}`
+    : undefined;
+}
+
+/** Why a thread already in a mode above the ceiling cannot send, the mode named by `label`. */
+export function runtimeModeRefusal(
+  policy: ManagedPolicySummary | undefined,
+  mode: RuntimeMode,
+  label: string,
+): string | undefined {
+  return policy !== undefined && isRuntimeModeAbove(mode, policy.limits?.maxRuntimeMode)
+    ? `${label} is not allowed by ${policy.organization}.`
+    : undefined;
+}
+
+/**
+ * Why webhook tasks are unavailable, or undefined when the policy allows them. Awake keeps
+ * webhooks out of every box (FDD-0053 §6.5), so in its build, named by `awakeApp`, the lock is
+ * Awake's own rather than the organization's.
+ */
+export function webhookTasksUnavailableLine(
+  policy: ManagedPolicySummary | undefined,
+  awakeApp: string | undefined,
+): string | undefined {
+  if (policy === undefined || policy.limits?.webhookTasks !== false) return undefined;
+  return awakeApp !== undefined
+    ? `Webhook tasks are not available in ${awakeApp}.`
+    : `Webhook tasks are not allowed by ${policy.organization}.`;
 }
 
 /** What usage-data notices say when the policy turns product analytics off. */

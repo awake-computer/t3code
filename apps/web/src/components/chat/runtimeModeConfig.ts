@@ -1,9 +1,7 @@
-import {
-  managedRuntimeModeDenial,
-  type ManagedPolicySummary,
-  type RuntimeMode,
-} from "@t3tools/contracts";
+import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
 import { type LucideIcon, LockIcon, PenLineIcon, ShieldOffIcon, SparklesIcon } from "lucide-react";
+
+import { runtimeModeUnavailableLine } from "../../state/managedPolicy";
 
 export const runtimeModeConfig: Record<
   RuntimeMode,
@@ -52,7 +50,7 @@ export function resolveRuntimeModeOptions(
 ) {
   return modes.map((mode) => {
     const option = { mode, ...runtimeModeConfig[mode] };
-    const disabledReason = managedRuntimeModeDenial(managedPolicy, mode);
+    const disabledReason = runtimeModeUnavailableLine(managedPolicy, mode);
     return disabledReason === undefined ? option : { ...option, disabledReason };
   });
 }

@@ -69,13 +69,10 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { WorktreeBaseBranchPicker } from "../WorktreeBaseBranchPicker";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { ConnectionStatusDot, connectionPhaseDotClassName } from "../ConnectionStatusDot";
-import {
-  AuthOrchestrationOperateScope,
-  clampManagedRuntimeMode,
-  managedCapabilityDenial,
-} from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope, clampManagedRuntimeMode } from "@t3tools/contracts";
 import { resolvePastedPath } from "@t3tools/shared/path";
-import { useManagedPolicy } from "~/state/managedPolicy";
+import { APP_BASE_NAME, IS_AWAKE_BRAND } from "~/branding";
+import { useManagedPolicy, webhookTasksUnavailableLine } from "~/state/managedPolicy";
 import { ManagedNotice } from "../ManagedPolicy";
 import { readEnvironmentScope } from "~/state/session";
 import { useSettingsScope } from "./SettingsScopeContext";
@@ -1213,7 +1210,10 @@ function ScheduledTaskEditorForm({
   const upsertTask = useAtomCommand(serverEnvironment.upsertScheduledTask, {
     label: "scheduled task upsert",
   });
-  const webhookDenial = managedCapabilityDenial(useManagedPolicy(environmentId), "webhookTasks");
+  const webhookDenial = webhookTasksUnavailableLine(
+    useManagedPolicy(environmentId),
+    IS_AWAKE_BRAND ? APP_BASE_NAME : undefined,
+  );
   const [draft, setDraft] = useState<DraftState>(() =>
     task
       ? taskToDraft(task)
@@ -1651,12 +1651,10 @@ function ScheduledTaskEditorForm({
                   <Toggle value="once">Once</Toggle>
                 ) : null}
                 <Toggle value="interval">Every interval</Toggle>
-                <Toggle
-                  value="webhook"
-                  disabled={webhookDenial !== undefined && draft.scheduleMode !== "webhook"}
-                >
-                  On webhook
-                </Toggle>
+                {/* The policy refuses webhooks, so the line below stands in for this choice. */}
+                {webhookDenial === undefined || draft.scheduleMode === "webhook" ? (
+                  <Toggle value="webhook">On webhook</Toggle>
+                ) : null}
               </ToggleGroup>
             </div>
 

@@ -39,7 +39,6 @@ import {
   EnvironmentRequestInvalidError,
   AuthOrchestrationOperateScope,
   clampManagedRuntimeMode,
-  managedRuntimeModeDenial,
   ProviderDriverKind,
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -234,7 +233,7 @@ const isEnvironmentRequestInvalidError = Schema.is(EnvironmentRequestInvalidErro
 import { toastManager } from "../ui/toast";
 import { BuildingIcon, PlayIcon } from "lucide-react";
 import { Button } from "../ui/button";
-import { useManagedPolicy } from "../../state/managedPolicy";
+import { runtimeModeRefusal, useManagedPolicy } from "../../state/managedPolicy";
 import { proposedPlanTitle } from "@t3tools/shared/proposedPlanText";
 import { hasProviderSetup } from "./ProviderStatusBanner";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
@@ -923,7 +922,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     managedPolicy,
   );
   // A thread or draft already above the ceiling would be refused; offer the broadest mode left.
-  const runtimeModeCeilingDenial = managedRuntimeModeDenial(managedPolicy, compatibleRuntimeMode);
+  const runtimeModeCeilingDenial = runtimeModeRefusal(
+    managedPolicy,
+    compatibleRuntimeMode,
+    runtimeModeConfig[compatibleRuntimeMode].label,
+  );
   const runtimeModeCeilingFallback =
     runtimeModeCeilingDenial === undefined
       ? undefined

@@ -1,7 +1,13 @@
 import { ProviderDriverKind, type ManagedPolicySummary } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { managedInstanceLocks, providerUnavailableLine } from "./managedPolicy";
+import {
+  managedInstanceLocks,
+  providerUnavailableLine,
+  runtimeModeRefusal,
+  runtimeModeUnavailableLine,
+  webhookTasksUnavailableLine,
+} from "./managedPolicy";
 
 const codex = ProviderDriverKind.make("codex");
 const claude = ProviderDriverKind.make("claudeAgent");
@@ -67,5 +73,46 @@ describe("providerUnavailableLine", () => {
     expect(providerUnavailableLine(onlyClaude, claude, "Awake Chat")).toBeUndefined();
     expect(providerUnavailableLine(policy, antigravity, "Awake Chat")).toBeUndefined();
     expect(providerUnavailableLine(undefined, antigravity, "Awake Chat")).toBeUndefined();
+  });
+});
+
+describe("the marks of a mode above the ceiling", () => {
+  const supervisedOnly: ManagedPolicySummary = {
+    ...policy,
+    limits: { maxRuntimeMode: "approval-required" },
+  };
+
+  it("names the organization whose ceiling keeps a mode out", () => {
+    expect(runtimeModeUnavailableLine(supervisedOnly, "full-access")).toBe(
+      "Not allowed by Example Corp",
+    );
+    expect(runtimeModeRefusal(supervisedOnly, "auto", "Auto")).toBe(
+      "Auto is not allowed by Example Corp.",
+    );
+  });
+
+  it("says nothing of a mode at or under the ceiling, or without one", () => {
+    expect(runtimeModeUnavailableLine(supervisedOnly, "approval-required")).toBeUndefined();
+    expect(runtimeModeRefusal(supervisedOnly, "approval-required", "Supervised")).toBeUndefined();
+    expect(runtimeModeUnavailableLine(policy, "full-access")).toBeUndefined();
+    expect(runtimeModeUnavailableLine(undefined, "full-access")).toBeUndefined();
+  });
+});
+
+describe("webhookTasksUnavailableLine", () => {
+  const noWebhooks: ManagedPolicySummary = { ...policy, limits: { webhookTasks: false } };
+
+  it("names Awake Chat in its build, where the lock is Awake's, and the org elsewhere", () => {
+    expect(webhookTasksUnavailableLine(noWebhooks, "Awake Chat")).toBe(
+      "Webhook tasks are not available in Awake Chat.",
+    );
+    expect(webhookTasksUnavailableLine(noWebhooks, undefined)).toBe(
+      "Webhook tasks are not allowed by Example Corp.",
+    );
+  });
+
+  it("says nothing while the policy allows webhook tasks, or without a policy", () => {
+    expect(webhookTasksUnavailableLine(policy, "Awake Chat")).toBeUndefined();
+    expect(webhookTasksUnavailableLine(undefined, "Awake Chat")).toBeUndefined();
   });
 });
