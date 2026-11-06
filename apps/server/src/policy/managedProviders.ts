@@ -373,11 +373,9 @@ export function makeManagedProviders(
       ...settings.providerInstances,
     };
     // Default instances exist without a settings entry until the user edits one; pin them too.
-    // Not a left-out driver's: it never runs, and an entry would list a provider nobody can use.
     for (const driver of pins.keys()) {
       const instanceId = defaultInstanceIdForDriver(driver);
       if (KNOWN_DRIVERS.get(driver)?.hasDefaultInstance === false) continue;
-      if (!isDriverAllowed(driver)) continue;
       if (providerInstances[instanceId] === undefined) providerInstances[instanceId] = { driver };
     }
     for (const [instanceId, instance] of Object.entries(providerInstances)) {

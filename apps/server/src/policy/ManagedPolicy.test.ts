@@ -326,32 +326,6 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
       }),
   );
 
-  it.effect("lists a pinned driver the policy leaves out only where the user configured it", () =>
-    Effect.gen(function* () {
-      const antigravity = ProviderDriverKind.make("antigravity");
-      const codex = ProviderDriverKind.make("codex");
-      const policy = yield* ManagedPolicy.fromDocument("/test/policy.json", {
-        schemaVersion: 1,
-        organization: "Example Corp",
-        limits: {
-          providers: {
-            allowedDrivers: [codex],
-            instances: { [antigravity]: { locked: true }, [codex]: { locked: true } },
-          },
-        },
-      });
-      const antigravityId = ProviderInstanceId.make("antigravity");
-      const pinned = policy.providers.applyLimits(DEFAULT_SERVER_SETTINGS).providerInstances;
-      assert.isUndefined(pinned[antigravityId]);
-      assert.deepEqual(pinned[ProviderInstanceId.make("codex")], { driver: codex });
-      const configured = policy.providers.applyLimits({
-        ...DEFAULT_SERVER_SETTINGS,
-        providerInstances: { [antigravityId]: { driver: antigravity, enabled: false } },
-      }).providerInstances;
-      assert.deepEqual(configured[antigravityId], { driver: antigravity, enabled: false });
-    }),
-  );
-
   it.effect("refuses a default runtime mode above its own ceiling", () =>
     Effect.gen(function* () {
       const reasons = yield* Effect.forEach([false, true], (locked) =>
