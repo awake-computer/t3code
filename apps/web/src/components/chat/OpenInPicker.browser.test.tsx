@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   clientEditors: ["vscode"] as readonly EditorId[],
   run: vi.fn(),
   openUrl: vi.fn(),
+  openPage: vi.fn(),
   setPreferred: vi.fn(),
   markHintSeen: vi.fn(),
   listeners: new Set<() => void>(),
@@ -63,6 +64,7 @@ vi.mock(import("../../remoteOpen"), async (importOriginal) => ({
   useRemoteCapableEditors: () => state.clientEditors,
   useRemoteOpenHint: () => [false, state.markHintSeen] as const,
   openRemoteEditorUrl: state.openUrl,
+  openManagedEditorUrl: state.openPage,
 }));
 
 import { OpenInPicker } from "./OpenInPicker";
@@ -81,6 +83,7 @@ async function setup() {
   state.clientEditors = editors;
   state.run.mockReset().mockResolvedValue(AsyncResult.success(undefined));
   state.openUrl.mockReset().mockResolvedValue(true);
+  state.openPage.mockReset().mockResolvedValue(true);
   state.setPreferred.mockReset();
   state.markHintSeen.mockReset();
   state.listeners.clear();
@@ -199,6 +202,33 @@ describe("remote editor links", () => {
     expect((await pressOpenFavorite()).defaultPrevented).toBe(true);
     expect(state.openUrl).toHaveBeenCalledWith(expect.stringContaining("ssh-remote+sol"));
     expect(state.run).not.toHaveBeenCalled();
+  });
+});
+
+describe("managed editor page", () => {
+  it("opens the policy's page from the button and the shortcut, and offers no chooser", async () => {
+    await using fixture = await setup();
+    const { screen, renderPicker, byLabel, click, pressOpenFavorite, FavoriteEditorFallback } =
+      fixture;
+    state.remote = {
+      mode: "editor-url",
+      editor: "vscode",
+      urlTemplate: "https://app.example/ide?host={host}&path={path}&kind={kind}",
+      host: "chat-x7k2.cell.example.com",
+    };
+    await renderPicker(editors, true);
+    expect(document.querySelector('[aria-label="Choose editor"]')).toBeNull();
+    await click(byLabel("Open in VS Code"));
+    expect(state.openPage).toHaveBeenCalledWith(
+      "https://app.example/ide?host=chat-x7k2.cell.example.com&path=%2Fwork%2Fproject&kind=folder",
+    );
+    expect(state.run).not.toHaveBeenCalled();
+    expect(state.openUrl).not.toHaveBeenCalled();
+
+    state.openPage.mockClear();
+    await act(async () => screen.rerender(<FavoriteEditorFallback />));
+    expect((await pressOpenFavorite()).defaultPrevented).toBe(true);
+    expect(state.openPage).toHaveBeenCalledWith(expect.stringContaining("path=%2Fwork%2Fproject"));
   });
 });
 

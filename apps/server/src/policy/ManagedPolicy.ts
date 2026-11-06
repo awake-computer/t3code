@@ -137,6 +137,7 @@ function summarizeLimits(
     browserCookieImport,
     providers,
     updates,
+    editor,
   } = document.limits ?? {};
   const connect = ManagedLimits.allowsConnect({ document });
   return {
@@ -164,6 +165,7 @@ function summarizeLimits(
             ...(updates.allowNightly === undefined ? {} : { allowNightly: updates.allowNightly }),
           },
         }),
+    ...(editor === undefined ? {} : { editor }),
   };
 }
 

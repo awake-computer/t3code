@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { EditorId } from "./editor.ts";
 import { ProviderDriverKind, ProviderInstanceEnvironmentVariableName } from "./providerInstance.ts";
 import { isRuntimeModeAbove, RuntimeMode } from "./providerPolicy.ts";
 
@@ -62,6 +63,39 @@ export const ManagedUpdatesPolicy = Schema.Struct({
 });
 export type ManagedUpdatesPolicy = typeof ManagedUpdatesPolicy.Type;
 
+const EditorUrlTemplate = HttpsUrl.check(
+  Schema.makeFilter((value: string) => value.includes("{path}"), {
+    expected: "an https URL with {path} in it",
+  }),
+);
+
+/**
+ * Where "Open in" sends a folder or file instead of a desktop editor: a web page, opened in a new
+ * tab, such as a browser IDE or a page that opens one. In `urlTemplate`, `{path}` is the absolute
+ * path, `{kind}` is `file` or `folder`, and `{host}` is the host the browser reaches the server at.
+ */
+export const ManagedEditorPolicy = Schema.Struct({
+  urlTemplate: EditorUrlTemplate,
+  /** The editor the page opens, which names and draws the control. Defaults to VS Code. */
+  editor: Schema.optionalKey(EditorId),
+});
+export type ManagedEditorPolicy = typeof ManagedEditorPolicy.Type;
+
+/** The page `editor` opens `absolutePath` at, each placeholder filled and URI-encoded. */
+export function managedEditorUrl(
+  editor: Pick<ManagedEditorPolicy, "urlTemplate">,
+  input: { readonly absolutePath: string; readonly isFile: boolean; readonly host: string },
+): string {
+  const values: Record<string, string> = {
+    path: input.absolutePath,
+    kind: input.isFile ? "file" : "folder",
+    host: input.host,
+  };
+  return editor.urlTemplate.replace(/\{(path|kind|host)\}/g, (_placeholder, name: string) =>
+    encodeURIComponent(values[name] ?? ""),
+  );
+}
+
 /** A kind of client the server may accept, mapped onto `ServerAuthPolicy`. */
 export const ManagedPolicyClient = Schema.Literals(["desktop", "local-browser", "remote"]);
 export type ManagedPolicyClient = typeof ManagedPolicyClient.Type;
@@ -83,6 +117,7 @@ export const ManagedPolicyLimits = Schema.Struct({
   browserCookieImport: Schema.optionalKey(Schema.Boolean),
   providers: Schema.optionalKey(ManagedProviderLimits),
   updates: Schema.optionalKey(ManagedUpdatesPolicy),
+  editor: Schema.optionalKey(ManagedEditorPolicy),
 });
 export type ManagedPolicyLimits = typeof ManagedPolicyLimits.Type;
 
@@ -112,6 +147,8 @@ export const ManagedPolicySummaryLimits = Schema.Struct({
   ),
   /** No `feedUrl`: it can carry a token, and only the desktop app, which reads the file, uses it. */
   updates: Schema.optionalKey(ManagedUpdatesPolicy.mapFields(Struct.omit(["feedUrl"]))),
+  /** Clients build the page's URL themselves, so they get the template. */
+  editor: Schema.optionalKey(ManagedEditorPolicy),
 });
 export type ManagedPolicySummaryLimits = typeof ManagedPolicySummaryLimits.Type;
 

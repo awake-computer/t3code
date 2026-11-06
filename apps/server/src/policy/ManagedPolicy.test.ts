@@ -458,4 +458,22 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
         }
       }),
   );
+
+  it.effect("tells clients the page that opens files, and refuses one it cannot fill", () =>
+    Effect.gen(function* () {
+      const base = { schemaVersion: 1, organization: "Example Corp" };
+      const editor = { urlTemplate: "https://ide.example/open?host={host}&path={path}&kind={kind}" };
+      const policy = yield* loadFrom(JSON.stringify({ ...base, limits: { editor } }));
+      assert.deepEqual(policy.summary?.limits, { editor });
+      for (const invalid of [
+        { urlTemplate: "http://ide.example/open?path={path}" },
+        { urlTemplate: "https://ide.example/open" },
+        { urlTemplate: "https://ide.example/open?path={path}", editor: "notepad" },
+      ]) {
+        yield* loadFrom(JSON.stringify({ ...base, limits: { editor: invalid } })).pipe(
+          Effect.flip,
+        );
+      }
+    }),
+  );
 });

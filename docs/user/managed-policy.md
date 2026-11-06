@@ -281,6 +281,25 @@ starts the binary you set.
   package tooling.
 - `allowNightly: false`: the nightly channel is unavailable.
 
+### Editor
+
+`editor` sends **Open in** to a web page instead of an editor on a machine, such as a browser IDE
+or a page that opens one. T3 Code fills in the page's address and opens it in a new tab, and offers
+no other editor.
+
+```json
+{
+  "limits": {
+    "editor": { "urlTemplate": "https://ide.example.com/open?path={path}&kind={kind}" }
+  }
+}
+```
+
+- `urlTemplate`: an https URL with `{path}` in it. `{path}` is the folder's or file's absolute path,
+  `{kind}` is `file` or `folder`, and `{host}` is the host the browser reached T3 Code at. Each is
+  URI-encoded.
+- `editor`: the editor the page opens, which names the button. The default is `vscode` (VS Code).
+
 ## What a policy does not cover
 
 The policy controls what T3 Code does. Agents run through each provider's own CLI, which reads its

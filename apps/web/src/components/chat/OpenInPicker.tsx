@@ -4,6 +4,7 @@ import {
   buildRemoteOpenUrl,
   EditorId,
   type EnvironmentId,
+  managedEditorUrl,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { memo, use, useRef } from "react";
@@ -13,6 +14,7 @@ import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
 import { usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
 import {
+  openManagedEditorUrl,
   openRemoteEditorUrl,
   useRemoteCapableEditors,
   useRemoteOpenHint,
@@ -239,14 +241,30 @@ export const OpenInPicker = memo(function OpenInPicker({
   const [remoteHintSeen, markRemoteHintSeen] = useRemoteOpenHint();
   const environmentLabel = useEnvironment(environmentId)?.label ?? "this machine";
   // Remote editors run on the viewing machine; only desktop can probe that PATH.
-  const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
+  const effectiveEditors =
+    remote.mode === "local-exec"
+      ? availableEditors
+      : remote.mode === "editor-url"
+        ? [remote.editor]
+        : remoteCapableEditors;
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
+  // The policy's page is the one place to open, so there is nothing to choose between.
+  const showsChooser = remote.mode !== "editor-url";
 
   const openInEditor = async (editorId: EditorId | null): Promise<boolean> => {
     if (!openInCwd) return false;
     const editor = editorId ?? preferredEditor;
     if (!editor) return false;
     if (remote.mode === "remote-unavailable") return false;
+    if (remote.mode === "editor-url") {
+      return openManagedEditorUrl(
+        managedEditorUrl(remote, {
+          absolutePath: openInCwd,
+          isFile: openInCwdIsFile,
+          host: remote.host,
+        }),
+      );
+    }
     if (remote.mode === "remote-links") {
       const url = buildRemoteOpenUrl({
         editor,
@@ -345,13 +363,15 @@ export const OpenInPicker = memo(function OpenInPicker({
             )}
           </MenuItem>
         )}
-        <MenuSub>
-          <MenuSubTrigger density="touch" disabled={isHostEditorDenied}>
-            <SquareArrowOutUpRightIcon className="size-4" />
-            <MenuItemLabel>Open in…</MenuItemLabel>
-          </MenuSubTrigger>
-          <MenuSubPopup>{editorItems}</MenuSubPopup>
-        </MenuSub>
+        {showsChooser && (
+          <MenuSub>
+            <MenuSubTrigger density="touch" disabled={isHostEditorDenied}>
+              <SquareArrowOutUpRightIcon className="size-4" />
+              <MenuItemLabel>Open in…</MenuItemLabel>
+            </MenuSubTrigger>
+            <MenuSubPopup>{editorItems}</MenuSubPopup>
+          </MenuSub>
+        )}
       </>
     );
   }
@@ -368,7 +388,7 @@ export const OpenInPicker = memo(function OpenInPicker({
         aria-label={compact ? "Open file in preferred editor" : primaryLabel}
         size={isPanel ? "sm" : "xs"}
         variant={isPanel ? "ghost" : "outline"}
-        part="primary"
+        part={showsChooser ? "primary" : "row"}
         panel={isPanel}
         disabled={!preferredEditor || !openInCwd || !canOpenEditor}
         {...(enableShortcut && !backgroundThread ? { [OPEN_FAVORITE_EDITOR_ATTRIBUTE]: "" } : {})}
@@ -405,37 +425,43 @@ export const OpenInPicker = memo(function OpenInPicker({
           {primaryLabel}
         </span>
       </ThreadDetailsControl>
-      {isPanel ? (
-        <span aria-hidden="true" className={THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS} />
-      ) : (
-        <GroupSeparator {...(!compact ? { className: "hidden @3xl/header-actions:block" } : {})} />
-      )}
-      <Menu open={menuOpen} onOpenChange={setMenuOpen}>
-        <MenuTrigger
-          disabled={isHostEditorDenied}
-          render={
-            <ThreadDetailsControl
-              aria-label="Choose editor"
-              size={isPanel ? "sm" : "icon-xs"}
-              variant={isPanel ? "ghost" : "outline"}
-              part="secondary"
-              panel={isPanel}
+      {showsChooser && (
+        <>
+          {isPanel ? (
+            <span aria-hidden="true" className={THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS} />
+          ) : (
+            <GroupSeparator
+              {...(!compact ? { className: "hidden @3xl/header-actions:block" } : {})}
             />
-          }
-        >
-          <ChevronDownIcon
-            aria-hidden="true"
-            className={isPanel ? THREAD_DETAILS_PANEL_CHEVRON_CLASS : "size-4"}
-          />
-        </MenuTrigger>
-        <MenuPopup
-          align="end"
-          {...(isPanel ? { anchor: panelAnchorRef } : {})}
-          className={isPanel ? "w-(--anchor-width)" : undefined}
-        >
-          {editorItems}
-        </MenuPopup>
-      </Menu>
+          )}
+          <Menu open={menuOpen} onOpenChange={setMenuOpen}>
+            <MenuTrigger
+              disabled={isHostEditorDenied}
+              render={
+                <ThreadDetailsControl
+                  aria-label="Choose editor"
+                  size={isPanel ? "sm" : "icon-xs"}
+                  variant={isPanel ? "ghost" : "outline"}
+                  part="secondary"
+                  panel={isPanel}
+                />
+              }
+            >
+              <ChevronDownIcon
+                aria-hidden="true"
+                className={isPanel ? THREAD_DETAILS_PANEL_CHEVRON_CLASS : "size-4"}
+              />
+            </MenuTrigger>
+            <MenuPopup
+              align="end"
+              {...(isPanel ? { anchor: panelAnchorRef } : {})}
+              className={isPanel ? "w-(--anchor-width)" : undefined}
+            >
+              {editorItems}
+            </MenuPopup>
+          </Menu>
+        </>
+      )}
     </ActionGroup>
   );
 });

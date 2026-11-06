@@ -3,6 +3,7 @@ import {
   REMOTE_CAPABLE_EDITOR_IDS,
   type EditorId,
   type EnvironmentId,
+  type ManagedEditorPolicy,
   type RemoteOpenTarget,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -24,7 +25,14 @@ export interface RemoteOpenHost {
 export type RemoteOpenState =
   | { readonly mode: "local-exec" }
   | { readonly mode: "remote-links"; readonly host: RemoteOpenHost }
-  | { readonly mode: "remote-unavailable" };
+  | { readonly mode: "remote-unavailable" }
+  /** The environment's policy sends "Open in" to a web page; `host` fills its `{host}`. */
+  | {
+      readonly mode: "editor-url";
+      readonly editor: EditorId;
+      readonly urlTemplate: string;
+      readonly host: string;
+    };
 
 export type RemoteOpenMode = RemoteOpenState["mode"];
 
@@ -48,13 +56,32 @@ function parseHostname(url: string): string | null {
   }
 }
 
+function parseHost(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveRemoteOpenState(input: {
   readonly target: ConnectionTarget | null;
   readonly sshTarget: { readonly alias: string; readonly username: string | null } | null;
   readonly remoteOpenTargets: ReadonlyArray<RemoteOpenTarget> | undefined;
   readonly isDesktopRenderer: boolean;
+  readonly managedEditor?: ManagedEditorPolicy | undefined;
 }): RemoteOpenState {
   const { target } = input;
+  // The administrator's page replaces every editor, on this machine or another.
+  if (input.managedEditor !== undefined) {
+    const host = target?._tag === "PrimaryConnectionTarget" ? parseHost(target.httpBaseUrl) : null;
+    return {
+      mode: "editor-url",
+      editor: input.managedEditor.editor ?? "vscode",
+      urlTemplate: input.managedEditor.urlTemplate,
+      host: host ?? "",
+    };
+  }
   if (target === null) {
     return LOCAL_EXEC;
   }
@@ -96,6 +123,13 @@ export function resolveRemoteOpenState(input: {
 
 function remoteOpenStatesEqual(previous: RemoteOpenState, next: RemoteOpenState): boolean {
   if (previous.mode !== next.mode) return false;
+  if (previous.mode === "editor-url" && next.mode === "editor-url") {
+    return (
+      previous.editor === next.editor &&
+      previous.urlTemplate === next.urlTemplate &&
+      previous.host === next.host
+    );
+  }
   if (previous.mode !== "remote-links" || next.mode !== "remote-links") return true;
   return (
     previous.host.kind === next.host.kind &&
@@ -120,6 +154,7 @@ const remoteOpenResolutionAtom = Atom.family((environmentId: EnvironmentId) =>
           profile !== null && profile._tag === "SshConnectionProfile" ? profile.target : null,
         remoteOpenTargets: presentation?.serverConfig?.remoteOpenTargets,
         isDesktopRenderer: window.desktopBridge !== undefined,
+        managedEditor: presentation?.serverConfig?.managedPolicy?.limits?.editor,
       }),
       isResolved: true,
     };
@@ -174,6 +209,20 @@ export async function openRemoteEditorUrl(url: string): Promise<boolean> {
     }
   }
   window.location.assign(url);
+  return true;
+}
+
+/** A managed editor is a web page, so it opens in a new tab and this one stays where it is. */
+export async function openManagedEditorUrl(url: string): Promise<boolean> {
+  const bridge = window.desktopBridge;
+  if (bridge !== undefined) {
+    try {
+      return await bridge.openExternal(url);
+    } catch {
+      return false;
+    }
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
   return true;
 }
 
