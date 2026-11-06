@@ -23,6 +23,11 @@ concurrency:
   group: awake-release-${{ github.ref }}
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
+env:
+  # The upstream release `awake` is built on. A release tag must name it, and the runtime install's
+  # 14-day rule counts from the day it was published.
+  AWAKE_UPSTREAM_VERSION: 0.1.7
+
 jobs:
   preflight:
     name: Resolve version
@@ -33,6 +38,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       upstream: ${{ steps.meta.outputs.upstream }}
       publish: ${{ steps.meta.outputs.publish }}
+      runtime_cutoff: ${{ steps.cutoff.outputs.cutoff }}
     steps:
       - id: meta
         name: Resolve the version from the ref
@@ -48,8 +54,14 @@ jobs:
               echo "A release tag is awake-v<upstream version>-<n>, such as awake-v0.1.7-1, not $REF_NAME." >&2
               exit 1
             fi
-            echo "upstream=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-            echo "version=${BASH_REMATCH[1]}-awake.${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+            upstream="${BASH_REMATCH[1]}"
+            build="${BASH_REMATCH[2]}"
+            if [[ "$upstream" != "$AWAKE_UPSTREAM_VERSION" ]]; then
+              echo "$REF_NAME names v$upstream, but awake is built on v$AWAKE_UPSTREAM_VERSION." >&2
+              exit 1
+            fi
+            echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
+            echo "version=$upstream-awake.$build" >> "$GITHUB_OUTPUT"
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             # A branch build is never published; its stamp only has to be a version the smoke test can find.
@@ -57,6 +69,27 @@ jobs:
             echo "version=0.0.0-awake.dev.${RUN_NUMBER}" >> "$GITHUB_OUTPUT"
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # The 14-day rule for the runtime packages the archive installs: none published after the
+      # upstream release, and once that release is 14 days old, none younger than 14 days.
+      - id: cutoff
+        name: Resolve the runtime install's cutoff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          released="$(gh api "repos/pingdotgg/t3code/releases/tags/v$AWAKE_UPSTREAM_VERSION" --jq .published_at)"
+          now="$(date -u +%s)"
+          cutoff="$(date -u -d "$released" +%s)"
+          if (( cutoff > now )); then
+            echo "v$AWAKE_UPSTREAM_VERSION's release date, $released, is in the future." >&2
+            exit 1
+          fi
+          if (( cutoff < now - 14 * 86400 )); then cutoff=$(( now - 14 * 86400 )); fi
+          cutoff="$(date -u -d "@$cutoff" +%Y-%m-%dT%H:%M:%SZ)"
+          echo "v$AWAKE_UPSTREAM_VERSION was released at $released: runtime packages must predate $cutoff."
+          echo "cutoff=$cutoff" >> "$GITHUB_OUTPUT"
 
   quality:
     name: Release quality checks
@@ -296,7 +329,7 @@ jobs:
         shell: bash
         run: |
           echo "dir=$RUNNER_TEMP/cli-stage-pnpm" >> "$GITHUB_OUTPUT"
-          echo "prefix=cli-stage-pnpm-v1-linux-${{ matrix.arch }}-$(date -u +%G-%V)-" >> "$GITHUB_OUTPUT"
+          echo "prefix=cli-stage-pnpm-v2-linux-${{ matrix.arch }}-$(date -u +%G-%V)-" >> "$GITHUB_OUTPUT"
 
       - name: Restore staged install cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -367,13 +400,21 @@ jobs:
       - name: Install patchelf
         run: command -v patchelf || { sudo apt-get update && sudo apt-get install -y patchelf; }
 
+      # pnpm takes the cutoff as an age in minutes, made an hour stricter, since the install
+      # starts a little after this.
       - name: Build CLI archive
         shell: bash
         env:
           pnpm_config_cache_dir: ${{ steps.stage_pnpm.outputs.dir }}/cache
           pnpm_config_store_dir: ${{ steps.stage_pnpm.outputs.dir }}/store
           pnpm_config_prefer_offline: "true"
+          RUNTIME_CUTOFF: ${{ needs.preflight.outputs.runtime_cutoff }}
         run: |
+          set -euo pipefail
+          [[ -n "$RUNTIME_CUTOFF" ]] || { echo "The preflight resolved no runtime cutoff." >&2; exit 1; }
+          T3CODE_STAGE_MINIMUM_RELEASE_AGE=$(( ($(date -u +%s) - $(date -u -d "$RUNTIME_CUTOFF" +%s)) / 60 + 60 ))
+          export T3CODE_STAGE_MINIMUM_RELEASE_AGE
+          echo "Runtime packages must be $T3CODE_STAGE_MINIMUM_RELEASE_AGE minutes old."
           node scripts/build-cli-archive.ts \
             --platform linux \
             --arch "${{ matrix.arch }}" \
@@ -383,6 +424,19 @@ jobs:
 
       - name: Smoke-test CLI archive
         run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ needs.preflight.outputs.version }}"
+
+      # The proof of the cutoff: every package the archive ships in node_modules, dated by npm.
+      - name: Check the archive's runtime packages against the cutoff
+        shell: bash
+        env:
+          RUNTIME_CUTOFF: ${{ needs.preflight.outputs.runtime_cutoff }}
+        run: |
+          set -euo pipefail
+          [[ -n "$RUNTIME_CUTOFF" ]] || { echo "The preflight resolved no runtime cutoff." >&2; exit 1; }
+          unpacked="$RUNNER_TEMP/runtime-package-ages"
+          mkdir -p "$unpacked"
+          tar -xzf release-cli/*.tar.gz -C "$unpacked"
+          node scripts/check-runtime-package-ages.ts --dir "$unpacked" --published-before "$RUNTIME_CUTOFF"
 
       - name: Save staged install cache
         if: always()

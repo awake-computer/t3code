@@ -55,8 +55,24 @@ const StageWorkspaceConfig = Schema.Struct({
   patchedDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   overrides: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   nodeLinker: Schema.optional(Schema.Literals(["hoisted"])),
+  minimumReleaseAge: Schema.optional(Schema.Number),
 });
 const encodeStageWorkspaceConfig = Schema.encodeEffect(fromYaml(StageWorkspaceConfig));
+
+// Awake's release workflow sets this, in minutes, so the runtime install takes no package newer
+// than its 14-day rule allows. The install keeps pnpm's own default without it.
+const StageMinimumReleaseAge = Config.Number("T3CODE_STAGE_MINIMUM_RELEASE_AGE").pipe(
+  Config.option,
+);
+
+class CliArchiveConfigInvalidError extends Schema.TaggedError<CliArchiveConfigInvalidError>()(
+  "CliArchiveConfigInvalidError",
+  { variable: Schema.String, value: Schema.Number },
+) {
+  override get message(): string {
+    return `${this.variable} must be a whole number of minutes, 0 or more, not ${this.value}.`;
+  }
+}
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
@@ -155,6 +171,16 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
     workspace.patchedDependencies ?? {},
     dependencies,
   );
+  const minimumReleaseAge = yield* StageMinimumReleaseAge;
+  if (
+    Option.isSome(minimumReleaseAge) &&
+    !(Number.isInteger(minimumReleaseAge.value) && minimumReleaseAge.value >= 0)
+  ) {
+    return yield* new CliArchiveConfigInvalidError({
+      variable: "T3CODE_STAGE_MINIMUM_RELEASE_AGE",
+      value: minimumReleaseAge.value,
+    });
+  }
 
   yield* fs.writeFileString(
     path.join(input.stageDir, "package.json"),
@@ -177,6 +203,7 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
         overrides: resolveCatalogDependencies(workspace.overrides ?? {}, catalog, "apps/server"),
       }),
       nodeLinker: "hoisted",
+      ...(Option.isSome(minimumReleaseAge) ? { minimumReleaseAge: minimumReleaseAge.value } : {}),
     }),
   );
   if (Object.keys(patchedDependencies).length > 0) {
