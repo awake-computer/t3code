@@ -607,6 +607,25 @@ export const ServerEventLoopStall = Schema.Struct({
 });
 export type ServerEventLoopStall = typeof ServerEventLoopStall.Type;
 
+/**
+ * `value` when it is exactly an origin Awake Chat may talk to by message: https, or http on this
+ * machine. Anything else, a path or a trailing slash included, is no origin at all.
+ */
+export function awakeConsoleOriginFrom(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  const { hostname, protocol } = url;
+  const local =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost");
+  const allowed = protocol === "https:" || (protocol === "http:" && local);
+  return allowed && url.origin === value ? url.origin : undefined;
+}
+
 export const ServerConfig = Schema.Struct({
   environment: ExecutionEnvironmentDescriptor,
   auth: ServerAuthDescriptor,
@@ -623,6 +642,8 @@ export const ServerConfig = Schema.Struct({
   settings: ServerSettings,
   /** Present when an administrator's policy file manages this environment. */
   managedPolicy: Schema.optionalKey(ManagedPolicySummary),
+  /** Awake's build: the console's exact origin, the only one Awake Chat talks to by message. */
+  awakeConsoleOrigin: Schema.optionalKey(Schema.String),
   shellResumeCompletionMarker: Schema.optionalKey(Schema.Boolean),
   /**
    * The shell can leave idle subagent children out of snapshots (`omitIdleSubagents`), and

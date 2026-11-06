@@ -1,14 +1,16 @@
 import * as Context from "effect/Context";
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as LogLevel from "effect/LogLevel";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-import type { OtlpEndpointSource } from "@t3tools/contracts";
+import { awakeConsoleOriginFrom, type OtlpEndpointSource } from "@t3tools/contracts";
 import { sweepStalePendingAttachments } from "./attachmentStore.ts";
 import {
   DEFAULT_SIGNAL_EXPORT,
@@ -30,6 +32,15 @@ export const telemetryChannel: ReleaseChannel =
 declare const __T3CODE_BRAND__: string | undefined;
 export const awakeBuild: boolean =
   typeof __T3CODE_BRAND__ !== "undefined" && __T3CODE_BRAND__ === "awake";
+
+/** In Awake's build, AWAKE_CONSOLE_ORIGIN when it is exactly an origin, for the web client. */
+export const awakeConsoleOrigin = Effect.gen(function* () {
+  if (!awakeBuild) return undefined;
+  const value = yield* Config.option(Config.String("AWAKE_CONSOLE_ORIGIN")).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+  );
+  return awakeConsoleOriginFrom(Option.getOrUndefined(value));
+});
 
 export const DEFAULT_PORT = 3773;
 
