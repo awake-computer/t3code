@@ -157,7 +157,11 @@ function writeProviderSettings() {
     return target;
   };
   const codex = fixture("testFixtures/codexCollabMockPeer.sh", "codex", 0o755);
-  fixture("testFixtures/codexCollabMockPeer.mjs", "codexCollabMockPeer.mjs");
+  const peerPath = fixture("testFixtures/codexCollabMockPeer.mjs", "codexCollabMockPeer.mjs");
+  // The peer calls itself Codex 0.0.0, which T3 Code refuses to run; Awake pins Codex 0.160.0.
+  const peer = NodeFS.readFileSync(peerPath, "utf8");
+  if (!peer.includes("t3-collab-mock/0.0.0")) throw new Error("The Codex peer's version moved.");
+  NodeFS.writeFileSync(peerPath, peer.replace("t3-collab-mock/0.0.0", "t3-collab-mock/0.160.0"));
   const wirePath = fixture("testFixtures/codexMultiAgentWire.json", "codexMultiAgentWire.json");
   const claude = fixture("testing/ProviderInstanceRegistryLive.fixture.mjs", "claude", 0o755);
 
@@ -357,13 +361,16 @@ try {
     const pairingPage = await pairingContext.newPage();
     await pairingPage.goto(pairing.pairUrl);
     await pairingPage.waitForURL((url) => !url.pathname.startsWith("/pair"), { timeout: 60_000 });
-    // The box's default theme is adopted once the client has the server's settings.
-    await waitFor(
-      async () =>
-        (await pairingPage.evaluate("localStorage.getItem('t3code:theme') === 'awake'")) === true,
-      "Awake's theme to be adopted",
-      30_000,
-    ).catch((error: unknown) => fail("adopting Awake's theme", error));
+    // The box's default theme is adopted once the client has the server's settings. The page
+    // navigates meanwhile, which can cut a read short.
+    const adopted = () =>
+      pairingPage
+        .evaluate("localStorage.getItem('t3code:theme') === 'awake'")
+        .then((value) => value === true)
+        .catch(() => false);
+    await waitFor(adopted, "Awake's theme to be adopted", 30_000).catch((error: unknown) =>
+      fail("adopting Awake's theme", error),
+    );
     const storageState = await pairingContext.storageState();
     await pairingContext.close();
 
@@ -392,6 +399,10 @@ try {
             captured.push(name);
           } catch (error) {
             fail(name, error);
+            const shown = await page
+              .evaluate("document.body.innerText.slice(0, 1500)")
+              .catch(() => "");
+            console.error(`[awake-screenshots] ${page.url()} showed:\n${redact(String(shown))}`);
             await page
               .screenshot({ path: NodePath.join(out, `FAILED-${name}`) })
               .catch(() => undefined);
@@ -413,4 +424,8 @@ try {
 
 const expected = THEMES.length * WIDTHS.length * 5;
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
-if (failures.length > 0 || captured.length !== expected) process.exitCode = 1;
+if (failures.length > 0 || captured.length !== expected) {
+  const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");
+  console.error(`[awake-screenshots] the server's last lines:\n${log.slice(-60).join("\n")}`);
+  process.exitCode = 1;
+}
