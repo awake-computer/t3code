@@ -8,8 +8,8 @@ import {
 } from "./awakeConsole";
 
 const consoleOrigin = "https://app.awake.computer";
-const themeFrom = (origin: string, data: unknown, allowed: string | undefined = consoleOrigin) =>
-  consoleThemeMessage({ origin, data }, allowed);
+const themeFrom = (origin: string, data: unknown) =>
+  consoleThemeMessage({ origin, data }, consoleOrigin);
 
 describe("protocol v1 with Awake's console", () => {
   it("takes the boot theme from the fragment and leaves the rest of it", () => {
@@ -26,7 +26,8 @@ describe("protocol v1 with Awake's console", () => {
     expect(themeFrom("https://other.example", v1)).toBeUndefined();
     expect(themeFrom(`${consoleOrigin}.other.example`, v1)).toBeUndefined();
     expect(themeFrom("http://app.awake.computer", v1)).toBeUndefined();
-    expect(themeFrom(consoleOrigin, v1, undefined)).toBeUndefined();
+    // With no console origin from the server, no message counts.
+    expect(consoleThemeMessage({ origin: consoleOrigin, data: v1 }, undefined)).toBeUndefined();
     expect(themeFrom(consoleOrigin, { awake: "chat", theme: "sepia" })).toBeUndefined();
     expect(themeFrom(consoleOrigin, { theme: "dark" })).toBeUndefined();
     expect(themeFrom(consoleOrigin, "dark")).toBeUndefined();
