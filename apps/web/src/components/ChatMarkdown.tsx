@@ -147,6 +147,8 @@ import {
 } from "../markdownFileHostPath";
 import { isMarkdownFileLinkLabel } from "@t3tools/shared/markdownLinks";
 import { isElectron } from "../env";
+import { IS_AWAKE_BRAND } from "../branding";
+import { confirmAgentLink } from "../agentLinks";
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
 import { resolveRemoteOpenState, useRemoteOpenResolution } from "../remoteOpen";
@@ -1211,6 +1213,11 @@ const CHAT_MARKDOWN_COMPONENTS = {
                       cause,
                     ),
                   );
+              }
+              if (IS_AWAKE_BRAND && !event.defaultPrevented) {
+                event.preventDefault();
+                event.stopPropagation();
+                void confirmAgentLink(href);
               }
               return;
             }
