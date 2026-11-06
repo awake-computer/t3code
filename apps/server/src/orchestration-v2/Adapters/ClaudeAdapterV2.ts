@@ -8806,12 +8806,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }
             // Text blocks are counted the same way, so each pairs with the block that streamed it.
             const replyText = context.replyText;
-            const firstText = replyText.snapshotBlockIndex.get(message.message.id) ?? 0;
+            const messageId = message.message.id;
+            const firstText = replyText.snapshotBlockIndex.get(messageId) ?? 0;
             const textBlocks = message.message.content.filter((block) => block.type === "text");
-            replyText.snapshotBlockIndex.set(message.message.id, firstText + textBlocks.length);
+            replyText.snapshotBlockIndex.set(messageId, firstText + textBlocks.length);
             replyText.snapshotItemIds.set(
               message.uuid,
-              textBlocks.map((_block, offset) => `${message.message.id}:text:${firstText + offset}`),
+              textBlocks.map((_block, offset) => `${messageId}:text:${firstText + offset}`),
             );
           }
 
