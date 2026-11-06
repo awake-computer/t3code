@@ -183,7 +183,7 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   if (IS_AWAKE_BRAND) {
     return (
       <span className="inline-flex min-w-0 items-center gap-1 text-sm font-medium tracking-tight">
-        <AwakeMark aria-hidden className="size-4 shrink-0" />
+        <AwakeMark className="size-4 shrink-0" />
         <span className="truncate">awake</span>
         <span className={onBackdrop ? "text-white/70" : "text-muted-foreground"}>chat</span>
       </span>
