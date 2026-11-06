@@ -36,6 +36,14 @@ const REPLY_MARK = "review it in the diff";
 const DIFF_MARK = "Good to see you";
 const SIGNED_OUT_MARK = "in Terminal, then come back here";
 
+// Whether the page shows `text`, inside shadow roots too, where the diff draws its lines.
+const deepTextCheck = (text: string) => `(() => {
+  const has = (root) =>
+    (root.textContent ?? "").includes(${JSON.stringify(text)}) ||
+    [...root.querySelectorAll("*")].some((node) => node.shadowRoot !== null && has(node.shadowRoot));
+  return has(document.body);
+})()`;
+
 const WIDTHS = [
   { width: 1440, height: 900 },
   { width: 1024, height: 768 },
@@ -272,7 +280,16 @@ function views(input: {
       open: async (page) => {
         await openThread(page);
         await page.keyboard.press("Control+d");
-        await page.getByText(DIFF_MARK).first().waitFor({ timeout: 30_000 });
+        await page
+          .getByRole("button", { name: /^Diff scope/ })
+          .first()
+          .waitFor({ timeout: 30_000 });
+        const linesShown = () =>
+          page
+            .evaluate(deepTextCheck(DIFF_MARK))
+            .then((value) => value === true)
+            .catch(() => false);
+        await waitFor(linesShown, "the diff's lines", 30_000);
       },
     },
     {
