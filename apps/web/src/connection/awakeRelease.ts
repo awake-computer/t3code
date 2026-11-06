@@ -1,4 +1,4 @@
-import { releaseWhileHidden } from "@t3tools/client-runtime/connection";
+import { type EnvironmentRegistry, releaseWhileHidden } from "@t3tools/client-runtime/connection";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -32,11 +32,13 @@ export function releasesWhileHidden(input: {
   return input.awake && !input.embedded;
 }
 
+type ReleaseLayer = Layer.Layer<never, never, EnvironmentRegistry.EnvironmentRegistry>;
+
 export function makeLayer(input: {
   readonly awake: boolean;
   readonly embedded: boolean;
   readonly hidden: Stream.Stream<boolean>;
-}) {
+}): ReleaseLayer {
   return Layer.effectDiscard(
     Effect.gen(function* () {
       if (!releasesWhileHidden(input)) return;
@@ -45,7 +47,7 @@ export function makeLayer(input: {
   );
 }
 
-export const layer = Layer.unwrap(
+export const layer: ReleaseLayer = Layer.unwrap(
   Effect.sync(() =>
     makeLayer({
       awake: IS_AWAKE_BRAND && typeof document !== "undefined",
