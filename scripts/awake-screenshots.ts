@@ -301,10 +301,12 @@ function views(input: {
       open: async (page) => {
         await openThread(page);
         await page.keyboard.press("Control+d");
-        await page
-          .getByRole("button", { name: /^Diff scope/ })
-          .first()
-          .waitFor({ timeout: 30_000 });
+        // T3 Code folds each file of a diff by default, so the files are unfolded, as a person
+        // reviewing it would, and the pointer leaves the button so no tooltip shows.
+        const expand = page.getByRole("button", { name: "Expand all files" }).first();
+        await expand.waitFor({ timeout: 30_000 });
+        await expand.click();
+        await page.mouse.move(1, 1);
         const linesShown = () =>
           page
             .evaluate(deepTextCheck(DIFF_MARK))
