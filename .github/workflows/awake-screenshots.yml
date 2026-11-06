@@ -1,0 +1,74 @@
+name: Awake screenshots
+
+# Awake Chat's main views, for review: a thread with a reply, a pull request, a diff, Settings and
+# the signed-out composer, in Paper and Soft dark at 1440, 1024 and 375 wide. The server is
+# T3 Code's own, built as the release builds it and seeded by scripts/awake-screenshots.ts with
+# T3 Code's own provider fixtures, with Awake's theme set as a box sets it. The PNGs, the server's
+# log and a summary are the run's artifact, awake-screenshots.
+#
+# It runs on a release tag, by hand, and on a push to awake that changes it.
+
+on:
+  push:
+    branches: [awake]
+    tags: ["awake-v*"]
+    paths:
+      - .github/workflows/awake-screenshots.yml
+      - scripts/awake-screenshots.ts
+      - assets/awake/awake-theme.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awake-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Screenshots
+    if: github.repository == 'awake-computer/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter=t3... --filter=@t3tools/web... --filter=@t3tools/scripts...
+
+      # The release's build: T3CODE_BRAND names the client Awake Chat, with Awake's fonts and mark.
+      - name: Build server and web client
+        env:
+          T3CODE_TELEMETRY_CHANNEL: dev
+          T3CODE_BRAND: awake
+        run: vp run --filter t3 build
+
+      - name: Apply web client branding
+        run: node scripts/apply-web-brand-assets.ts awake apps/server/dist/client
+
+      - name: Install Chromium
+        run: node scripts/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
+
+      # The job's own token reads the pull request, as a person's GitHub sign-in would.
+      - name: Seed and capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/awake-screenshots.ts --out "$RUNNER_TEMP/awake-screenshots"
+
+      - name: Upload screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: awake-screenshots
+          path: ${{ runner.temp }}/awake-screenshots
+          if-no-files-found: error
+          retention-days: 30
