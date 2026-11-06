@@ -21,8 +21,8 @@ import { startDesktopUpdateLaunchNotice } from "./components/sidebar/updateEvery
 import { startSlowRpcRequestToasts } from "./components/SlowRpcRequestToastCoordinator";
 import { startThreadNotifications } from "./components/ThreadNotificationCoordinator";
 import { startGuideRunNotifications } from "./components/pullRequest/guide/PullRequestGuideRunCoordinator";
-import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "./branding";
-import { resolveServerBackedAppDisplayName } from "./branding.logic";
+import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL, IS_AWAKE_BRAND } from "./branding";
+import { awakeDocumentTitle, resolveServerBackedAppDisplayName } from "./branding.logic";
 import { isElectron } from "./env";
 import {
   subscribeComposerDraftModelReconciliation,
@@ -117,7 +117,41 @@ function startClientAppearance(): void {
   apply();
 }
 
-function startDocumentTitle(): void {
+/** Awake's build titles the tab after the open thread, or after the box when none is open. */
+function startAwakeDocumentTitle(router: AppRouter): void {
+  const openThread = () => {
+    const target = resolveThreadRouteTarget(router.state.matches.at(-1)?.params ?? {});
+    return target?.kind === "server" ? target.threadRef : null;
+  };
+  const render = () => {
+    const threadRef = openThread();
+    document.title = awakeDocumentTitle({
+      thread: threadRef
+        ? appAtomRegistry.get(environmentThreadShells.threadShellAtom(threadRef))?.title
+        : undefined,
+      box: appAtomRegistry.get(primaryServerConfigAtom)?.environment.label,
+      app: APP_BASE_NAME,
+    });
+  };
+  let unwatchThread = () => {};
+  const watchRoute = () => {
+    unwatchThread();
+    const threadRef = openThread();
+    unwatchThread = threadRef
+      ? appAtomRegistry.subscribe(environmentThreadShells.threadShellAtom(threadRef), render)
+      : () => {};
+    render();
+  };
+  router.subscribe("onResolved", watchRoute);
+  appAtomRegistry.subscribe(primaryServerConfigAtom, render);
+  watchRoute();
+}
+
+function startDocumentTitle(router: AppRouter): void {
+  if (IS_AWAKE_BRAND) {
+    startAwakeDocumentTitle(router);
+    return;
+  }
   appAtomRegistry.subscribe(
     primaryServerConfigAtom,
     (config) => {
@@ -180,7 +214,7 @@ export function startAppServices(): AppRouter {
   installDesktopPasteAsText(window.desktopBridge, window);
 
   startClientAppearance();
-  startDocumentTitle();
+  startDocumentTitle(router);
   startEnvironmentThemeRepaint();
   startBrowserChromeThemeSync(router);
   startDefaultThemeAdoption();

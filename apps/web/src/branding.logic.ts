@@ -11,6 +11,17 @@ export function formatAppDisplayName(input: {
   return `${input.baseName} (${input.stageLabel})`;
 }
 
+/** Awake's tab title: the open thread's title, or else the box's name, then the app's name. */
+export function awakeDocumentTitle(input: {
+  readonly thread: string | undefined;
+  readonly box: string | undefined;
+  readonly app: string;
+}): string {
+  const thread = input.thread?.trim();
+  const lead = thread !== undefined && thread.length > 0 ? thread : input.box?.trim();
+  return lead !== undefined && lead.length > 0 ? `${lead} · ${input.app}` : input.app;
+}
+
 export function resolveServerBackedAppStageLabel(input: {
   readonly primaryServerVersion: string | null | undefined;
   readonly fallbackStageLabel: string;
