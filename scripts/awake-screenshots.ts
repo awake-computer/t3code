@@ -99,10 +99,7 @@ const serverEnv: Record<string, string> = {
 const redact = (text: string) =>
   text
     .replace(/^[\s▀-▟]*[▀-▟][\s▀-▟]*$/gmu, "")
-    .replace(
-      /(token=|token%3D|Token: |"credential": ?"|"token": ?")[^\s&#"%]+/giu,
-      "$1<redacted>",
-    );
+    .replace(/(token=|token%3D|Token: |"credential": ?"|"token": ?")[^\s&#"%]+/giu, "$1<redacted>");
 
 function run(command: string, args: ReadonlyArray<string>, cwd: string, env = baseEnv): string {
   const result = NodeChildProcess.spawnSync(command, args, {
