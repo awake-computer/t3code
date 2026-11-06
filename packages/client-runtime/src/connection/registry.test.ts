@@ -1166,6 +1166,94 @@ describe("EnvironmentRegistry", () => {
     }),
   );
 
+  it.effect("releasing closes every connection and leaves each saved choice alone", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness([RELAY_TARGET]);
+
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        yield* registry.start;
+        yield* registry.reconcilePlatform([new PrimaryConnectionRegistration({ target: TARGET })]);
+        yield* awaitConnectionState(
+          registry,
+          TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+        yield* awaitConnectionState(
+          registry,
+          RELAY_TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+
+        yield* registry.setReleased(true);
+        yield* awaitConnectionState(
+          registry,
+          TARGET.environmentId,
+          (state) => !state.desired && state.phase === "available",
+        );
+        yield* awaitConnectionState(
+          registry,
+          RELAY_TARGET.environmentId,
+          (state) => !state.desired && state.phase === "available",
+        );
+        expect(yield* Ref.get(harness.releasedSessions)).toBe(2);
+        const entries = yield* SubscriptionRef.get(registry.entries);
+        expect(entries.get(TARGET.environmentId)?.enabled).toBe(true);
+        expect(entries.get(RELAY_TARGET.environmentId)?.enabled).toBe(true);
+        expect((yield* Ref.get(harness.storedDisabled)).size).toBe(0);
+
+        yield* registry.setReleased(false);
+        yield* awaitConnectionState(
+          registry,
+          TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+        yield* awaitConnectionState(
+          registry,
+          RELAY_TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+        expect(yield* Ref.get(harness.sessions)).toHaveLength(4);
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
+  it.effect("an environment added or switched on while released waits to be resumed", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness([RELAY_TARGET], [], [], {
+        initialDisabled: [RELAY_TARGET.environmentId],
+      });
+
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        yield* registry.start;
+        yield* registry.setReleased(true);
+        yield* registry.reconcilePlatform([new PrimaryConnectionRegistration({ target: TARGET })]);
+        yield* registry.setEnabled(RELAY_TARGET.environmentId, true);
+        yield* Effect.yieldNow;
+
+        expect((yield* registry.state(TARGET.environmentId)).phase).toBe("available");
+        expect((yield* registry.state(RELAY_TARGET.environmentId)).phase).toBe("available");
+        expect(yield* Ref.get(harness.sessions)).toHaveLength(0);
+        expect(
+          (yield* SubscriptionRef.get(registry.entries)).get(RELAY_TARGET.environmentId)?.enabled,
+        ).toBe(true);
+
+        yield* registry.setReleased(false);
+        yield* awaitConnectionState(
+          registry,
+          TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+        yield* awaitConnectionState(
+          registry,
+          RELAY_TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
   it.effect("re-registering a switched-off environment keeps it off", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness([RELAY_TARGET], [], [], {

@@ -158,6 +158,12 @@ export class EnvironmentRegistry extends Context.Service<
       | PlatformEnvironmentRemovalError
     >;
     readonly retryNow: (environmentId: EnvironmentId) => Effect.Effect<void>;
+    /**
+     * Closes every connection while the client has no use for it, such as a page hidden for a
+     * long time, and leaves each saved on/off choice alone. An environment added meanwhile starts
+     * released too. `false` reconnects each one that is switched on and supported.
+     */
+    readonly setReleased: (released: boolean) => Effect.Effect<void>;
     readonly setEnabled: (
       environmentId: EnvironmentId,
       enabled: boolean,
@@ -284,6 +290,7 @@ export const make = Effect.gen(function* () {
   const leaseLocks = yield* Ref.make<ReadonlyMap<EnvironmentId, LeaseLock>>(new Map());
   const leaseLocksGuard = yield* Semaphore.make(1);
   const started = yield* Ref.make(false);
+  const released = yield* Ref.make(false);
 
   const withLeaseLock = <A, E, R>(
     environmentId: EnvironmentId,
@@ -363,10 +370,12 @@ export const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const environmentId = entry.target.environmentId;
           const scope = yield* Scope.fork(registryScope);
+          // Seed the intent to avoid publishing a false switched-off state
+          // before an enabled, compatible environment starts connecting.
+          const initiallyDesired =
+            entry.enabled && entry.unsupportedReason === undefined && !(yield* Ref.get(released));
           const supervisor = yield* EnvironmentSupervisor.make(entry, {
-            // Seed the intent to avoid publishing a false switched-off state
-            // before an enabled, compatible environment starts connecting.
-            initiallyDesired: entry.enabled && entry.unsupportedReason === undefined,
+            initiallyDesired,
             learnRoutes: (input) => learnRoutes({ environmentId, ...input }),
           }).pipe(
             Effect.provideService(Connectivity.Connectivity, connectivity),
@@ -1053,6 +1062,28 @@ export const make = Effect.gen(function* () {
       Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
       Effect.withSpan("EnvironmentRegistry.retryNow"),
     );
+  const setReleased = Effect.fn("EnvironmentRegistry.setReleased")(function* (next: boolean) {
+    if ((yield* Ref.getAndSet(released, next)) === next) return;
+    // Listed after the flag changed: a supervisor made meanwhile either read it or is listed.
+    const environmentIds = [...(yield* SubscriptionRef.get(entries)).keys()];
+    yield* Effect.forEach(
+      environmentIds,
+      (environmentId) =>
+        withLeaseLock(
+          environmentId,
+          Effect.gen(function* () {
+            const lease = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+            // A later call that flipped the flag back applies its own change.
+            if (lease === undefined || (yield* Ref.get(released)) !== next) return;
+            if (next) return yield* lease.supervisor.disconnect;
+            if (lease.entry.enabled && lease.entry.unsupportedReason === undefined) {
+              yield* lease.supervisor.connect;
+            }
+          }),
+        ),
+      { concurrency: "unbounded", discard: true },
+    );
+  });
   const setEnabled = Effect.fn("EnvironmentRegistry.setEnabled")(function* (
     environmentId: EnvironmentId,
     enabled: boolean,
@@ -1093,7 +1124,8 @@ export const make = Effect.gen(function* () {
           return nextEntries;
         });
         if (lease !== undefined) {
-          yield* enabled ? lease.supervisor.connect : lease.supervisor.disconnect;
+          if (!enabled) yield* lease.supervisor.disconnect;
+          else if (!(yield* Ref.get(released))) yield* lease.supervisor.connect;
         } else if (enabled) {
           yield* createServiceScope(next);
         }
@@ -1174,7 +1206,7 @@ export const make = Effect.gen(function* () {
             new Map(current).set(environmentId, { ...lease, entry: next }),
           );
           if (error !== null) yield* lease.supervisor.disconnect;
-          else if (next.enabled) yield* lease.supervisor.connect;
+          else if (next.enabled && !(yield* Ref.get(released))) yield* lease.supervisor.connect;
         }
         yield* SubscriptionRef.update(entries, (current) =>
           new Map(current).set(environmentId, next),
@@ -1195,6 +1227,7 @@ export const make = Effect.gen(function* () {
     reorderRoutes,
     removeRelayEnvironments,
     retryNow,
+    setReleased,
     setEnabled,
     setCompatibility,
     state,
