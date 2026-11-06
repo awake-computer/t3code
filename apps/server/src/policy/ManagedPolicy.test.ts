@@ -466,7 +466,7 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
         JSON.stringify({ ...base, limits: { providers: { runtimeModes } } });
       const runtimeModes = {
         codex: { "approval-required": { approvalPolicy: "on-request", sandbox: "config" } },
-      };
+      } as const;
       const policy = yield* loadFrom(withModes(runtimeModes));
       assert.deepEqual(policy.summary?.limits, { providers: { runtimeModes } });
       for (const invalid of [
