@@ -27,6 +27,11 @@ if (!TELEMETRY_CHANNELS.includes(telemetryChannel)) {
     `T3CODE_TELEMETRY_CHANNEL must be one of ${TELEMETRY_CHANNELS.join(", ")}, got "${telemetryChannel}".`,
   );
 }
+// Awake's builds set T3CODE_BRAND=awake, as the web client's build does.
+const brand = process.env.T3CODE_BRAND?.trim() ?? "";
+if (brand !== "" && brand !== "awake") {
+  throw new Error(`T3CODE_BRAND must be "awake" or unset, got "${brand}".`);
+}
 
 // tsdown SEA needs one chunk (sourcemaps count) and Node >=25.7, so package separately.
 // TEMPORARY one-time Node fix. Remove when fixed: https://github.com/nodejs/node/issues/67048
@@ -113,6 +118,7 @@ export default mergeConfig(
       define: {
         __T3CODE_BUILD_CHANNEL__: JSON.stringify(cliBuildChannel),
         __T3CODE_TELEMETRY_CHANNEL__: JSON.stringify(telemetryChannel),
+        __T3CODE_BRAND__: JSON.stringify(brand),
         __T3CODE_BUILD_RELAY_URL__: JSON.stringify(repoEnv.T3CODE_RELAY_URL?.trim() ?? ""),
         __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
           repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",

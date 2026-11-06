@@ -240,7 +240,8 @@ jobs:
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
       # Builds in other repositories report "dev" telemetry, as release.yml has it. T3CODE_BRAND
-      # names the web client Awake Chat, with Awake's mark on its splash.
+      # names the web client Awake Chat, with Awake's mark on its splash, and makes the server a
+      # release build, which reads no policy but the machine's.
       - name: Build JS bundle
         env:
           T3CODE_TELEMETRY_CHANNEL: dev
@@ -351,6 +352,7 @@ jobs:
       - name: Build CLI single-executable
         env:
           T3CODE_TELEMETRY_CHANNEL: dev
+          T3CODE_BRAND: awake
         run: node apps/server/scripts/cli.ts build-exe --verbose
 
       - name: Stage resource monitor for the CLI archive

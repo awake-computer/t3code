@@ -26,6 +26,11 @@ declare const __T3CODE_TELEMETRY_CHANNEL__: ReleaseChannel | undefined;
 export const telemetryChannel: ReleaseChannel =
   typeof __T3CODE_TELEMETRY_CHANNEL__ === "undefined" ? "dev" : __T3CODE_TELEMETRY_CHANNEL__;
 
+// T3CODE_BRAND=awake at build time: Awake's release build, whatever its telemetry channel says.
+declare const __T3CODE_BRAND__: string | undefined;
+export const awakeBuild: boolean =
+  typeof __T3CODE_BRAND__ !== "undefined" && __T3CODE_BRAND__ === "awake";
+
 export const DEFAULT_PORT = 3773;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);

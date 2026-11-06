@@ -25,7 +25,7 @@ import {
   readManagedPolicyFile,
 } from "@t3tools/shared/managedPolicyFile";
 
-import { telemetryChannel } from "../config.ts";
+import { awakeBuild, telemetryChannel } from "../config.ts";
 import * as ManagedLimits from "./managedLimits.ts";
 import * as ManagedProviders from "./managedProviders.ts";
 import * as ManagedSettings from "./managedSettings.ts";
@@ -172,15 +172,21 @@ export const load = Effect.fn("ManagedPolicy.load")(function* (path: string) {
   return yield* fromDocument(path, yield* readManagedPolicyFile(path));
 });
 
+/**
+ * Whether T3CODE_DEV_MANAGED_POLICY_PATH may replace the machine's policy: in source builds, so a
+ * policy can be tried without root. Release builds never allow it, Awake's included, though they
+ * report dev telemetry: any override a user can set is a way around the policy.
+ */
+export function devPolicyPathAllowed(channel: string, awake: boolean): boolean {
+  return channel === "dev" && !awake;
+}
+
 const make = Effect.gen(function* () {
-  // Source builds may read a policy from elsewhere so it can be tried without root. Release
-  // builds never do: any override a user can set is a way around the policy.
-  const devPath =
-    telemetryChannel === "dev"
-      ? yield* Config.option(Config.String("T3CODE_DEV_MANAGED_POLICY_PATH")).pipe(
-          Effect.orElseSucceed(() => Option.none<string>()),
-        )
-      : Option.none<string>();
+  const devPath = devPolicyPathAllowed(telemetryChannel, awakeBuild)
+    ? yield* Config.option(Config.String("T3CODE_DEV_MANAGED_POLICY_PATH")).pipe(
+        Effect.orElseSucceed(() => Option.none<string>()),
+      )
+    : Option.none<string>();
   const platform = yield* HostProcess.Platform;
   const policy = yield* Option.match(devPath, {
     onSome: load,

@@ -498,3 +498,10 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
     }),
   );
 });
+
+it("reads a policy from the dev override only in source builds, never in Awake's", () => {
+  assert.isTrue(ManagedPolicy.devPolicyPathAllowed("dev", false));
+  assert.isFalse(ManagedPolicy.devPolicyPathAllowed("dev", true));
+  assert.isFalse(ManagedPolicy.devPolicyPathAllowed("stable", false));
+  assert.isFalse(ManagedPolicy.devPolicyPathAllowed("nightly", false));
+});
