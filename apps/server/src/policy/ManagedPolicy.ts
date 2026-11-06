@@ -141,7 +141,9 @@ function summarizeLimits(
   } = document.limits ?? {};
   const connect = ManagedLimits.allowsConnect({ document });
   const providerSummary = {
-    ...(providers?.allowedDrivers === undefined ? {} : { allowedDrivers: providers.allowedDrivers }),
+    ...(providers?.allowedDrivers === undefined
+      ? {}
+      : { allowedDrivers: providers.allowedDrivers }),
     ...(Object.keys(lockedInstanceFields).length === 0 ? {} : { lockedInstanceFields }),
     ...(providers?.runtimeModes === undefined ? {} : { runtimeModes: providers.runtimeModes }),
   };
