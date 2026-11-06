@@ -300,7 +300,12 @@ export const OpenInPicker = memo(function OpenInPicker({
   );
 
   const backgroundThread = use(BackgroundThreadContext);
-  const options = resolveOpenInOptions(navigator.platform, effectiveEditors);
+  const editorLabel = remote.mode === "editor-url" ? remote.label : undefined;
+  const resolvedOptions = resolveOpenInOptions(navigator.platform, effectiveEditors);
+  const options =
+    editorLabel === undefined
+      ? resolvedOptions
+      : resolvedOptions.map((option) => ({ ...option, label: editorLabel }));
   const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
   const primaryLabel = isPanel ? `Open in ${primaryOption?.label ?? "editor"}` : "Open";
 
@@ -394,7 +399,8 @@ export const OpenInPicker = memo(function OpenInPicker({
         {...(enableShortcut && !backgroundThread ? { [OPEN_FAVORITE_EDITOR_ATTRIBUTE]: "" } : {})}
         onClick={() => {
           if (!preferredEditor) return;
-          const label = editorLabelForPlatform(preferredEditor, navigator.platform);
+          const label =
+            primaryOption?.label ?? editorLabelForPlatform(preferredEditor, navigator.platform);
           void openInEditor(preferredEditor).then((opened) => {
             if (opened) announce(`Opened in ${label}`);
           });

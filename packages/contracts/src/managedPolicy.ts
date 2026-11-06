@@ -103,8 +103,10 @@ const EditorUrlTemplate = HttpsUrl.check(
  */
 export const ManagedEditorPolicy = Schema.Struct({
   urlTemplate: EditorUrlTemplate,
-  /** The editor the page opens, which names and draws the control. Defaults to VS Code. */
+  /** The editor the page opens, which draws the control. Defaults to VS Code. */
   editor: Schema.optionalKey(EditorId),
+  /** What the control opens, as "Open in <label>". Defaults to the editor's own name. */
+  label: Schema.optionalKey(TrimmedNonEmptyString),
 });
 export type ManagedEditorPolicy = typeof ManagedEditorPolicy.Type;
 

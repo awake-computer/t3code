@@ -92,7 +92,7 @@ export function useOpenFavoriteEditorShortcut({
           host: remote.host,
         });
         void openManagedEditorUrl(url).then((opened) => {
-          if (opened) announce(`Opened in ${label}`);
+          if (opened) announce(`Opened in ${remote.label ?? label}`);
         });
         return;
       }

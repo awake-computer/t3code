@@ -484,6 +484,7 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
       const base = { schemaVersion: 1, organization: "Example Corp" };
       const editor = {
         urlTemplate: "https://ide.example/open?host={host}&path={path}&kind={kind}",
+        label: "IDE",
       };
       const policy = yield* loadFrom(JSON.stringify({ ...base, limits: { editor } }));
       assert.deepEqual(policy.summary?.limits, { editor });

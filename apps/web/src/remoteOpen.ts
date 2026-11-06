@@ -32,6 +32,7 @@ export type RemoteOpenState =
       readonly editor: EditorId;
       readonly urlTemplate: string;
       readonly host: string;
+      readonly label?: string;
     };
 
 export type RemoteOpenMode = RemoteOpenState["mode"];
@@ -75,11 +76,13 @@ export function resolveRemoteOpenState(input: {
   // The administrator's page replaces every editor, on this machine or another.
   if (input.managedEditor !== undefined) {
     const host = target?._tag === "PrimaryConnectionTarget" ? parseHost(target.httpBaseUrl) : null;
+    const { label } = input.managedEditor;
     return {
       mode: "editor-url",
       editor: input.managedEditor.editor ?? "vscode",
       urlTemplate: input.managedEditor.urlTemplate,
       host: host ?? "",
+      ...(label === undefined ? {} : { label }),
     };
   }
   if (target === null) {
@@ -127,7 +130,8 @@ function remoteOpenStatesEqual(previous: RemoteOpenState, next: RemoteOpenState)
     return (
       previous.editor === next.editor &&
       previous.urlTemplate === next.urlTemplate &&
-      previous.host === next.host
+      previous.host === next.host &&
+      previous.label === next.label
     );
   }
   if (previous.mode !== "remote-links" || next.mode !== "remote-links") return true;

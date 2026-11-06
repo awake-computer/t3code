@@ -215,10 +215,11 @@ describe("managed editor page", () => {
       editor: "vscode",
       urlTemplate: "https://app.example/ide?host={host}&path={path}&kind={kind}",
       host: "chat-x7k2.cell.example.com",
+      label: "IDE",
     };
     await renderPicker(editors, true);
     expect(document.querySelector('[aria-label="Choose editor"]')).toBeNull();
-    await click(byLabel("Open in VS Code"));
+    await click(byLabel("Open in IDE"));
     expect(state.openPage).toHaveBeenCalledWith(
       "https://app.example/ide?host=chat-x7k2.cell.example.com&path=%2Fwork%2Fproject&kind=folder",
     );

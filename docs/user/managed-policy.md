@@ -320,7 +320,9 @@ no other editor.
 - `urlTemplate`: an https URL with `{path}` in it. `{path}` is the folder's or file's absolute path,
   `{kind}` is `file` or `folder`, and `{host}` is the host the browser reached T3 Code at. Each is
   URI-encoded.
-- `editor`: the editor the page opens, which names the button. The default is `vscode` (VS Code).
+- `editor`: the editor the page opens, which draws the button. The default is `vscode` (VS Code).
+- `label`: what the button opens, as "Open in" followed by the label, such as `IDE`. The default
+  is the editor's own name.
 
 ## What a policy does not cover
 
