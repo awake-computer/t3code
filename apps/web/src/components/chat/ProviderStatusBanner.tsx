@@ -78,7 +78,7 @@ export function hasProviderSetup(status: ServerProvider): boolean {
   );
 }
 
-export function getProviderStatusMessage(status: ServerProvider): string {
+export function getProviderStatusMessage(status: ServerProvider, awake = IS_AWAKE_BRAND): string {
   if (
     status.auth.status !== "unauthenticated" &&
     status.compatibilityAdvisory?.status === "broken" &&
@@ -86,13 +86,16 @@ export function getProviderStatusMessage(status: ServerProvider): string {
   ) {
     return status.compatibilityAdvisory.message;
   }
-  if (status.message) return status.message;
   const providerName = status.displayName?.trim() || formatProviderDriverKindLabel(status.driver);
+  // Ahead of the server's own words, which name a sign-in a box's agents don't use.
+  if (awake && status.auth.status === "unauthenticated") {
+    return `Sign in to ${providerName} in Terminal, then come back here.`;
+  }
+  if (status.message) return status.message;
   if (!status.installed && hasProviderSetup(status)) {
     return `Open provider setup to install ${formatProviderDriverKindLabel(status.driver)} on this environment.`;
   }
   if (status.auth.status === "unauthenticated") {
-    if (IS_AWAKE_BRAND) return `Sign in to ${providerName} in Terminal, then come back here.`;
     if (hasProviderSetup(status)) {
       return status.driver === "antigravity"
         ? "Open provider setup to sign in with Google."

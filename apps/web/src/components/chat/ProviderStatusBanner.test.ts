@@ -14,6 +14,28 @@ describe("awakeSignInCommand", () => {
     expect(awakeSignInCommand("cursor", true)).toBeUndefined();
     expect(awakeSignInCommand("codex", false)).toBeUndefined();
   });
+
+  it("says so in place of the server's own sign-in words, in Awake's build only", () => {
+    const signedOut: ServerProvider = {
+      instanceId: ProviderInstanceId.make("claudeAgent"),
+      driver: ProviderDriverKind.make("claudeAgent"),
+      displayName: "Claude Code",
+      enabled: true,
+      installed: true,
+      version: "2.1.219",
+      status: "error",
+      auth: { status: "unauthenticated" },
+      message: "Claude Code is not authenticated. Run `claude auth login` and try again.",
+      checkedAt: "2026-11-06T00:00:00Z",
+      models: [],
+      skills: [],
+      slashCommands: [],
+    };
+    expect(getProviderStatusMessage(signedOut, true)).toBe(
+      "Sign in to Claude Code in Terminal, then come back here.",
+    );
+    expect(getProviderStatusMessage(signedOut, false)).toBe(signedOut.message);
+  });
 });
 
 const provider: ServerProvider = {
