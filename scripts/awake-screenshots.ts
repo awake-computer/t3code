@@ -34,7 +34,9 @@ const REPLY =
 const REPLY_MARK = "review it in the diff";
 // A line only the diff shows: the reply never quotes the code.
 const DIFF_MARK = "Good to see you";
-const SIGNED_OUT_MARK = "in Terminal, then come back here";
+const SIGNED_OUT_MARK = "opens a terminal here and runs";
+// The box names the agent by its driver: "Claude".
+const SIGN_IN = "Sign in to Claude";
 
 // Whether the page shows `text`, inside shadow roots too, where the diff draws its lines.
 const deepTextCheck = (text: string) => `(() => {
@@ -79,8 +81,9 @@ for (const dir of [home, t3Home, bin, homeRepo, pullRequestRepo, out]) {
   NodeFS.mkdirSync(dir, { recursive: true });
 }
 
+// The agents' stand-ins are on the PATH, so Sign in shows the command a box runs.
 const baseEnv: Record<string, string> = {
-  PATH: process.env.PATH ?? "",
+  PATH: [bin, process.env.PATH ?? ""].join(NodePath.delimiter),
   HOME: home,
   T3CODE_HOME: t3Home,
   TMPDIR: scratch,
@@ -242,7 +245,7 @@ function writeProviderSettings() {
         enabled: true,
         // The fixture is signed out while this file is missing.
         environment: [variable("T3_CLAUDE_LOGIN_MARKER", NodePath.join(scratch, "signed-in"))],
-        config: { enabled: true, binaryPath: claude },
+        config: { enabled: true, binaryPath: NodePath.basename(claude) },
       },
     },
   };
@@ -326,6 +329,35 @@ function views(input: {
         await page.goto(`${origin}/`);
         await page.waitForURL(/\/draft\//, { timeout: 30_000 });
         await page.getByText(SIGNED_OUT_MARK).first().waitFor({ timeout: 30_000 });
+      },
+    },
+    {
+      // Claude Code's Sign in, under its row and in its Status.
+      name: "providers",
+      open: async (page) => {
+        const target = new URLSearchParams({
+          environmentId: input.environmentId,
+          instanceId: "claudeAgent",
+        });
+        await page.goto(`${origin}/settings/providers?${target.toString()}`);
+        await page.getByRole("button", { name: SIGN_IN }).first().waitFor({ timeout: 30_000 });
+      },
+    },
+    {
+      // The signed-out composer's Sign in: its terminal drawer running Claude Code's login, whose
+      // stand-in waits quietly.
+      name: "sign-in",
+      open: async (page) => {
+        await page.goto(`${origin}/`);
+        await page.waitForURL(/\/draft\//, { timeout: 30_000 });
+        await page.getByRole("button", { name: SIGN_IN }).first().click({ timeout: 30_000 });
+        await page
+          .locator('[data-thread-terminal-drawer][data-terminal-owner="drawer"]')
+          .first()
+          .waitFor({ timeout: 30_000 });
+        // The terminal draws on a canvas, so the shell's echo of the command is given time.
+        await page.waitForTimeout(2_000);
+        await page.mouse.move(1, 1);
       },
     },
   ];
@@ -466,7 +498,7 @@ try {
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
 
-const expected = THEMES.length * WIDTHS.length * 5;
+const expected = THEMES.length * WIDTHS.length * 7;
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");

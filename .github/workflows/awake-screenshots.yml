@@ -1,10 +1,10 @@
 name: Awake screenshots
 
-# Awake Chat's main views, for review: a thread with a reply, a pull request, a diff, Settings and
-# the signed-out composer, in Paper and Soft dark at 1440, 1024 and 375 wide. The server is
-# T3 Code's own, built as the release builds it and seeded by scripts/awake-screenshots.ts with
-# T3 Code's own provider fixtures, with Awake's theme set as a box sets it. The PNGs, the server's
-# log and a summary are the run's artifact, awake-screenshots.
+# Awake Chat's main views, for review: a thread with a reply, a pull request, a diff, Settings, the
+# signed-out composer, Settings' providers and a Sign in's terminal, in Paper and Soft dark at
+# 1440, 1024 and 375 wide. The server is T3 Code's own, built as the release builds it and seeded
+# by scripts/awake-screenshots.ts with T3 Code's own provider fixtures, with Awake's theme set as a
+# box sets it. The PNGs, the server's log and a summary are the run's artifact, awake-screenshots.
 #
 # It runs on a release tag, by hand, and on a push to awake that changes it.
 
