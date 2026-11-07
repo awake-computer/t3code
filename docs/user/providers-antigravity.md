@@ -69,8 +69,8 @@ Leave the field blank to use the managed runtime, or a compatible executable on
 ### Use the Antigravity CLI
 
 From Antigravity CLI 1.5.0, the CLI serves ACP itself, as `agy acp`. Set **Binary
-path** to the CLI, `agy`, or the `antigravity` binary it runs, and T3 Code starts
-`agy acp` with no helper beside it, on the CLI's own sign-in. Sign in by running
+path** to the CLI's command, `agy`, and T3 Code starts `agy acp` with no helper
+beside it, on the CLI's own sign-in. Sign in by running
 `agy` in a terminal, with any method it offers; T3 Code offers no sign-in for it,
 and the sign-in method settings above don't apply. Its modes are its own: Full
 access and Auto-accept edits run as `accept-edits`, Supervised and Auto as

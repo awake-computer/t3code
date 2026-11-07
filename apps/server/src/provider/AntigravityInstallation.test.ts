@@ -237,19 +237,14 @@ const expectPreviousRelease = Effect.fn("test.expectPreviousAntigravityRelease")
 });
 
 it("tells the Antigravity CLI's binary path from the standalone server's", () => {
-  for (const binaryPath of [
-    "/opt/awake/bin/agy",
-    "agy",
-    "/usr/lib/agy/antigravity",
-    "C:\\agy\\agy.exe",
-    " agy ",
-  ]) {
+  for (const binaryPath of ["/opt/awake/bin/agy", "agy", "C:\\agy\\agy.exe", " agy "]) {
     expect(isAntigravityCliPath(binaryPath)).toBe(true);
   }
   for (const binaryPath of [
     undefined,
     "",
     "/release/agy_acp_server.par",
+    "/missing/antigravity",
     "/opt/agy-wrapper",
     "agy/acp",
   ]) {

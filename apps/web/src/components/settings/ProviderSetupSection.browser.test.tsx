@@ -282,6 +282,18 @@ describe("Antigravity setup", () => {
     expect(setup.authState).toHaveBeenLastCalledWith({ environmentId, input: { instanceId } });
   });
 
+  it("shows the Antigravity CLI's own sign-in in place of T3 Code's setup", async () => {
+    resetSetup();
+    await using screen = await renderSetup({
+      provider: { ...provider, installed: false },
+      binaryPath: "/opt/awake/bin/agy",
+    });
+    expect(screen.occurrences("Signs in with its own agy")).toBe(1);
+    expect(screen.button("Sign in")).toBeNull();
+    expect(screen.button("Install Antigravity")).toBeNull();
+    expect(setup.startAuth).not.toHaveBeenCalled();
+  });
+
   it("does not let a shared managed install hide an invalid custom binary path", async () => {
     resetSetup();
     setup.auth = authState({ phase: "idle", flowId: null, authorizationUrl: null });

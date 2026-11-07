@@ -855,12 +855,10 @@ export const AntigravitySettings = makeProviderSettingsSchema(
 );
 export type AntigravitySettings = typeof AntigravitySettings.Type;
 
-/** The Antigravity CLI's names: `agy`, its command, and `antigravity`, its archive's binary. */
-const ANTIGRAVITY_CLI_NAMES: ReadonlySet<string> = new Set(["agy", "antigravity"]);
-
 /**
- * Whether an Antigravity binary path names the Antigravity CLI, which serves ACP itself as
- * `agy acp` from 1.5.0, on its own sign-in, rather than the standalone ACP server.
+ * Whether an Antigravity binary path is the Antigravity CLI's command, `agy`, which serves ACP
+ * itself as `agy acp` from 1.5.0, on its own sign-in, rather than the standalone ACP server. Any
+ * other name, `antigravity` among them, stays the standalone server's.
  */
 export function isAntigravityCliPath(binaryPath: string | undefined): boolean {
   const name = binaryPath
@@ -869,7 +867,7 @@ export function isAntigravityCliPath(binaryPath: string | undefined): boolean {
     .pop()
     ?.replace(/\.exe$/iu, "")
     .toLowerCase();
-  return name !== undefined && ANTIGRAVITY_CLI_NAMES.has(name);
+  return name === "agy";
 }
 
 export const UsageLimitSourceConfig = Schema.Struct({
