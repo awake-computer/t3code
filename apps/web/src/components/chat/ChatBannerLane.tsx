@@ -19,6 +19,7 @@ export function ChatBannerLane(props: {
   providerStatusBannerKey: string | null;
   setDismissedProviderStatusBannerKey: Dispatch<SetStateAction<string | null>>;
   onOpenProviderSetup: (instanceId: ProviderInstanceId) => void;
+  onSignIn: (status: ServerProvider) => Promise<void>;
   threadId: ThreadId;
   threadError: string | null;
   threadErrorClass: OrchestrationV2ProviderFailureClass | null;
@@ -32,6 +33,7 @@ export function ChatBannerLane(props: {
     providerStatusBannerKey,
     setDismissedProviderStatusBannerKey,
     onOpenProviderSetup,
+    onSignIn,
     threadId,
     threadError,
     threadErrorClass,
@@ -47,6 +49,7 @@ export function ChatBannerLane(props: {
         status={providerStatus}
         onDismiss={() => setDismissedProviderStatusBannerKey(providerStatusBannerKey)}
         onOpenProviderSetup={onOpenProviderSetup}
+        onSignIn={onSignIn}
       />
       <ThreadErrorBanner
         error={threadError}

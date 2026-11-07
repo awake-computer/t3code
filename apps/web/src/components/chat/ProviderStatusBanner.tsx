@@ -1,31 +1,23 @@
 import {
+  AuthTerminalOperateScope,
   type EnvironmentId,
   type ProviderInstanceId,
   type ServerProvider,
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { memo, useRef, useState } from "react";
-import { InfoIcon, XIcon } from "lucide-react";
+import { InfoIcon, TerminalIcon, XIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button, InlineButton } from "../ui/button";
 import { formatProviderDriverKindLabel } from "../../providerModels";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { serverEnvironment } from "../../state/server";
+import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { RefreshIcon } from "../ui/refresh-icon";
 import { IS_AWAKE_BRAND } from "../../branding";
+import { awakeSignInCommand, offersAwakeSignIn } from "../../awakeSignIn";
 import { CommandBlock } from "../CommandBlock";
-
-// In a box, each agent signs in with its own CLI in Terminal, never through Chat.
-const AWAKE_SIGN_IN_COMMANDS: Readonly<Record<string, string>> = {
-  claudeAgent: "claude",
-  codex: "codex login --device-auth",
-};
-
-/** The Terminal command that signs an agent in, where Awake's build names one. */
-export function awakeSignInCommand(driver: string, awake = IS_AWAKE_BRAND): string | undefined {
-  return awake ? AWAKE_SIGN_IN_COMMANDS[driver] : undefined;
-}
 
 function getIncompatibleVersion(status: ServerProvider) {
   const compatibility = status.compatibilityAdvisory;
@@ -114,19 +106,26 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   environmentId,
   onDismiss,
   onOpenProviderSetup,
+  onSignIn,
   status,
 }: {
   environmentId: EnvironmentId;
   onDismiss: () => void;
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
+  /** Awake's build: runs the agent's own login in this thread's terminal drawer. */
+  onSignIn?: (status: ServerProvider) => Promise<void>;
   status: ServerProvider | null;
 }) {
   const canRefresh = useAtomValue(serverEnvironment.refreshProviders.permissionAtom(environmentId));
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     label: "Refresh provider status",
   });
+  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const refreshingRef = useRef(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const signingInRef = useRef(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const refresh = async () => {
     if (!status || !canRefresh || refreshingRef.current) return;
@@ -138,6 +137,16 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
     });
     refreshingRef.current = false;
     setIsRefreshing(false);
+  };
+
+  const signIn = async () => {
+    if (!status || !onSignIn || signingInRef.current) return;
+    signingInRef.current = true;
+    setIsSigningIn(true);
+    // The sign-in reports its own failures; the button only waits for it.
+    await onSignIn(status).catch(() => undefined);
+    signingInRef.current = false;
+    setIsSigningIn(false);
   };
 
   if (!status || getProviderStatusBannerKey(status) === null) {
@@ -152,11 +161,23 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
     : incompatible
       ? `${providerName} ${status.version ?? ""} is ${incompatible.status === "broken" ? "known to be broken" : "unsupported"}`
       : `${providerName} provider status`;
-  const message = incompatible?.message ?? getProviderStatusMessage(status);
+  const signInCommand =
+    isUnauthenticated && serverConfig !== null
+      ? awakeSignInCommand(status, serverConfig.settings, serverConfig.environment.platform.os)
+      : undefined;
+  const signsInHere =
+    onSignIn !== undefined &&
+    signInCommand !== undefined &&
+    canOperateTerminal &&
+    offersAwakeSignIn(status);
+  const message =
+    incompatible?.message ??
+    (signsInHere
+      ? `Sign in opens a terminal here and runs ${providerName}'s own login.`
+      : getProviderStatusMessage(status));
   const isWarning =
     incompatible?.status !== "broken" && (status.status === "warning" || incompatible !== null);
-  const signInCommand = isUnauthenticated ? awakeSignInCommand(status.driver) : undefined;
-  // Awake's build signs agents in in Terminal, so it offers no provider setup for it.
+  // Awake's build signs agents in with their own CLI, so it offers no provider setup for it.
   const offersSetup = !(IS_AWAKE_BRAND && isUnauthenticated) && hasProviderSetup(status);
 
   return (
@@ -183,6 +204,18 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
                 <InlineButton onClick={() => onOpenProviderSetup(status.instanceId)}>
                   Open provider setup
                 </InlineButton>
+              ) : null}
+              {signsInHere ? (
+                <Button
+                  aria-label={`Sign in to ${providerName}`}
+                  disabled={isSigningIn}
+                  onClick={() => void signIn()}
+                  size="xs"
+                  variant="outline"
+                >
+                  <TerminalIcon />
+                  Sign in
+                </Button>
               ) : null}
               <Button
                 aria-label={`Refresh ${providerName} provider status`}

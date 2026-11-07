@@ -1,20 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import {
-  awakeSignInCommand,
   getProviderStatusBannerKey,
   getProviderStatusMessage,
   shouldShowProviderStatusBanner,
 } from "./ProviderStatusBanner";
 
-describe("awakeSignInCommand", () => {
-  it("names each agent's own sign-in in Terminal, in Awake's build only", () => {
-    expect(awakeSignInCommand("claudeAgent", true)).toBe("claude");
-    expect(awakeSignInCommand("codex", true)).toBe("codex login --device-auth");
-    expect(awakeSignInCommand("cursor", true)).toBeUndefined();
-    expect(awakeSignInCommand("codex", false)).toBeUndefined();
-  });
-
+describe("getProviderStatusMessage in Awake's build", () => {
   it("says so in place of the server's own sign-in words, in Awake's build only", () => {
     const signedOut: ServerProvider = {
       instanceId: ProviderInstanceId.make("claudeAgent"),

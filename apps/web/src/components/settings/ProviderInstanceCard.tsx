@@ -9,6 +9,7 @@ import {
   ExternalLinkIcon,
   LayersIcon,
   PlusIcon,
+  TerminalIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -659,6 +660,8 @@ interface ProviderInstanceCardProps {
   readonly mode: "list" | "editor";
   readonly selected?: boolean | undefined;
   readonly onSelect?: (() => void) | undefined;
+  /** Awake's build: the provider's own login, run in a thread's terminal drawer. */
+  readonly onSignIn?: (() => void) | undefined;
   readonly readOnly?: boolean | undefined;
   readonly canWriteSettings?: boolean;
   readonly onUpdate: (nextInstance: ProviderInstanceConfig) => void;
@@ -730,6 +733,7 @@ export function ProviderInstanceCard({
   mode,
   selected = false,
   onSelect,
+  onSignIn,
   readOnly = false,
   canWriteSettings = true,
   onUpdate,
@@ -1097,6 +1101,19 @@ export function ProviderInstanceCard({
     </Popover>
   ) : null;
 
+  const signInButton = onSignIn ? (
+    <Button
+      type="button"
+      size="xs"
+      variant="outline"
+      aria-label={`Sign in to ${displayName}`}
+      onClick={onSignIn}
+    >
+      <TerminalIcon />
+      Sign in
+    </Button>
+  ) : null;
+
   if (mode === "list") {
     return (
       <div
@@ -1151,6 +1168,9 @@ export function ProviderInstanceCard({
                 </span>
               </ProviderStatusDiagnostic>
             </span>
+            {signInButton ? (
+              <span className="pointer-events-auto relative mt-2 flex">{signInButton}</span>
+            ) : null}
           </span>
         </div>
         <span className="flex h-5 shrink-0 items-center gap-1">
@@ -1274,7 +1294,7 @@ export function ProviderInstanceCard({
   return (
     <>
       <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
-        <SettingsRow title="Status" status={statusContent} />
+        <SettingsRow title="Status" status={statusContent} control={signInButton} />
         <SettingsRow
           title="Display name"
           control={

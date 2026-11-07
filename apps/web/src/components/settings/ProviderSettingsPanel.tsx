@@ -4,6 +4,7 @@ import {
   AuthSettingsWriteScope,
   AuthProvidersManageScope,
   AuthOrchestrationReadScope,
+  AuthTerminalOperateScope,
 } from "@t3tools/contracts";
 import { useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { useAtomValue } from "@effect/atom-react";
@@ -93,6 +94,8 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { providerUnavailableLine, useManagedPolicy } from "~/state/managedPolicy";
 import { APP_BASE_NAME, IS_AWAKE_BRAND } from "~/branding";
+import { offersAwakeSignIn, useAwakeSignInStore } from "~/awakeSignIn";
+import { useNavigateToMainApp } from "../sidebar/mainAppLocation";
 import { ExpandableText } from "./ExpandableText";
 import { IntervalSecondsField } from "./IntervalSecondsField";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
@@ -1275,6 +1278,16 @@ function ProviderInstanceRow({
     driver,
     IS_AWAKE_BRAND ? APP_BASE_NAME : undefined,
   );
+  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
+  const navigateToMainApp = useNavigateToMainApp();
+  // Awake's Sign in runs in a thread's terminal drawer, so it leaves Settings for the thread.
+  const signIn =
+    canOperateTerminal && notAllowed === undefined && offersAwakeSignIn(liveProvider)
+      ? () => {
+          useAwakeSignInStore.getState().requestSignIn({ environmentId, instanceId });
+          void navigateToMainApp();
+        }
+      : undefined;
   const acpProjects =
     mode === "editor" && liveProvider?.driver === "acpRegistry"
       ? allProjects.filter((project) => project.environmentId === environmentId)
@@ -1326,6 +1339,7 @@ function ProviderInstanceRow({
       mode={mode}
       selected={selected}
       onSelect={mode === "list" ? () => actions.selectInstance(instanceId) : undefined}
+      onSignIn={signIn}
       readOnly={readOnly}
       runtime={
         mode === "editor" && codexSetupMode === "managed" ? (

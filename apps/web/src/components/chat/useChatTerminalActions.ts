@@ -13,6 +13,7 @@ import {
   AuthTerminalOperateScope,
   type EnvironmentId,
   type ProjectScript,
+  type ProviderInstanceId,
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -321,6 +322,48 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     );
   };
   const runShellCommandStable = useStableCallback(runShellCommand);
+  /**
+   * Awake's Sign in: a new drawer terminal in the provider instance's environment, so the login
+   * lands where that instance reads it, running the command. The drawer takes the terminal only
+   * once it is open: attaching first would start the shell without that environment.
+   */
+  const runProviderSignIn = async (command: string, providerInstanceId: ProviderInstanceId) => {
+    if (!hasTerminalWriteAccess() || !activeThreadId || !activeThreadRef) return null;
+    const threadRef = activeThreadRef;
+    const launched = terminalActions.launchTerminal({
+      place: () => {},
+      size: { cols: SCRIPT_TERMINAL_COLS, rows: SCRIPT_TERMINAL_ROWS },
+      providerInstanceId,
+    });
+    if (!launched) return null;
+    const openResult = await launched.result;
+    if (openResult._tag === "Failure") {
+      if (!isAtomCommandInterrupted(openResult)) {
+        const error = squashAtomCommandFailure(openResult);
+        setThreadError(
+          activeThreadId,
+          error instanceof Error ? error.message : "Could not open a terminal to sign in.",
+        );
+      }
+      return null;
+    }
+    storeEnsureTerminal(threadRef, launched.terminalId, { open: true, active: true });
+    focusTerminal(threadRef, launched.terminalId);
+    const writeResult = await terminalActions.writeToTerminal(launched.terminalId, `${command}\r`);
+    if (!writeResult) return null;
+    if (writeResult._tag === "Failure") {
+      if (!isAtomCommandInterrupted(writeResult)) {
+        const error = squashAtomCommandFailure(writeResult);
+        setThreadError(
+          activeThreadId,
+          error instanceof Error ? error.message : `Could not run ${command}.`,
+        );
+      }
+      return null;
+    }
+    return { threadId: threadRef.threadId, terminalId: launched.terminalId };
+  };
+  const runProviderSignInStable = useStableCallback(runProviderSignIn);
   const addTerminalSurface = () => {
     if (!activeThreadRef) return;
     const launched = terminalActions.launchTerminal({
@@ -449,6 +492,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     requestClosePanelTerminalStable,
     requestCloseTerminalStable,
     runProjectScriptStable,
+    runProviderSignInStable,
     runShellCommandStable,
     setTerminalOpenStable,
     splitPanelTerminalStable,

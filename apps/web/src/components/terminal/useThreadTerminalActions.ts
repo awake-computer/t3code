@@ -1,6 +1,7 @@
 import {
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
+  type ProviderInstanceId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
@@ -88,6 +89,8 @@ export function useThreadTerminalActions(threadRef: ScopedThreadRef | null) {
     readonly location?: TerminalLaunchLocation | null;
     readonly extraEnv?: Record<string, string>;
     readonly size?: { readonly cols: number; readonly rows: number };
+    /** Starts the shell in this provider instance's environment, as its own processes run. */
+    readonly providerInstanceId?: ProviderInstanceId;
   }) => {
     if (!threadRef || !canWrite() || !project) return null;
     const location = input.location ?? defaultLaunchLocation();
@@ -107,6 +110,7 @@ export function useThreadTerminalActions(threadRef: ScopedThreadRef | null) {
           ...(input.extraEnv ? { extraEnv: input.extraEnv } : {}),
         }),
         ...input.size,
+        ...(input.providerInstanceId ? { providerInstanceId: input.providerInstanceId } : {}),
       },
     });
     return { terminalId, result };

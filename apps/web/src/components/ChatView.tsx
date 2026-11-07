@@ -49,6 +49,7 @@ import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts } from "./chat/useChatShortcuts";
 import { ChatBannerLane } from "./chat/ChatBannerLane";
+import { useAwakeSignIn } from "./chat/useAwakeSignIn";
 import * as Schema from "effect/Schema";
 import {
   AuthOrchestrationOperateScope,
@@ -1886,6 +1887,7 @@ export default function ChatView(props: ChatViewProps) {
     closePanelTerminalStable,
     lastInvokedScriptByProjectId,
     runProjectScriptStable,
+    runProviderSignInStable,
     runShellCommandStable,
     splitPanelTerminalStable,
     splitPanelTerminalVerticalStable,
@@ -1908,6 +1910,18 @@ export default function ChatView(props: ChatViewProps) {
     gitCwd,
     setTerminalUiLaunchContext,
     setThreadError,
+  });
+  const startAwakeSignIn = useAwakeSignIn({
+    environmentId,
+    providers: providerStatuses,
+    serverConfig,
+    enabled:
+      !backgroundThread &&
+      !embedded &&
+      canOperateTerminal &&
+      activeThreadRef !== null &&
+      activeProject !== null,
+    runProviderSignIn: runProviderSignInStable,
   });
   const {
     saveProjectScript: saveProjectScriptStable,
@@ -3372,6 +3386,7 @@ export default function ChatView(props: ChatViewProps) {
               providerStatusBannerKey={providerStatusBannerKey}
               setDismissedProviderStatusBannerKey={setDismissedProviderStatusBannerKey}
               onOpenProviderSetup={openProviderSetupStable}
+              onSignIn={startAwakeSignIn}
               threadId={activeThread.id}
               threadError={timelineThreadError}
               threadErrorClass={

@@ -27,6 +27,8 @@ import {
   type OrchestrationV2ThreadStreamItem,
   type OrchestrationV2TurnItem,
   type TerminalMetadataStreamEvent,
+  type TerminalOpenInput,
+  type TerminalSessionSnapshot,
 } from "@t3tools/contracts";
 import type {
   ConnectionAttemptError,
@@ -102,6 +104,9 @@ const serverConfig: ServerConfig = {
   }),
   keybindings: DEFAULT_RESOLVED_KEYBINDINGS,
 };
+
+// The server config an install serves: the one above, or its providers and settings replaced.
+let currentServerConfig = serverConfig;
 
 const project: OrchestrationProjectShell = {
   id: PROJECT_ID,
@@ -382,13 +387,48 @@ const handlers: Record<string, (input: never) => unknown> = {
       };
     }),
   [WS_METHODS.subscribeServerConfig]: () =>
-    subscribe([{ version: 1 as const, type: "snapshot" as const, config: serverConfig }]),
+    subscribe([{ version: 1 as const, type: "snapshot" as const, config: currentServerConfig }]),
+};
+
+// The payloads of the calls an install answers beyond the subscriptions, by method.
+const requests = new Map<string, Array<unknown>>();
+const recorded =
+  <I>(method: string, answer: (input: I) => unknown) =>
+  (input: I) => {
+    requests.set(method, [...(requests.get(method) ?? []), input]);
+    return answer(input);
+  };
+
+// With `answersTerminals`, a terminal opens running and takes what is written to it, and a
+// provider refresh answers with the providers served.
+let answersTerminals = false;
+const terminalHandlers: Record<string, (input: never) => unknown> = {
+  [WS_METHODS.terminalOpen]: recorded(WS_METHODS.terminalOpen, (input: TerminalOpenInput) =>
+    Effect.succeed({
+      threadId: input.threadId,
+      terminalId: input.terminalId,
+      cwd: input.cwd,
+      worktreePath: input.worktreePath ?? null,
+      status: "running",
+      pid: 4242,
+      history: "",
+      exitCode: null,
+      exitSignal: null,
+      label: input.terminalId,
+      updatedAt: "2026-03-17T19:12:28.000Z",
+    } satisfies TerminalSessionSnapshot),
+  ),
+  [WS_METHODS.terminalWrite]: recorded(WS_METHODS.terminalWrite, () => Effect.void),
+  [WS_METHODS.serverRefreshProviders]: recorded(WS_METHODS.serverRefreshProviders, () =>
+    Effect.succeed({ providers: currentServerConfig.providers }),
+  ),
 };
 
 // Unanswered calls stay pending, like a server that has not replied yet.
 const client = new Proxy(handlers, {
   get: (target, method: string) =>
     target[method] ??
+    (answersTerminals ? terminalHandlers[method] : undefined) ??
     (() => {
       const rpc = WsRpcGroup.requests.get(method);
       return rpc && RpcSchema.isStreamSchema(rpc.successSchema) ? Stream.never : Effect.never;
@@ -397,9 +437,9 @@ const client = new Proxy(handlers, {
 
 const session: EnvironmentConnectionLease["session"] = {
   client: client as unknown as WsRpcProtocolClient,
-  initialConfig: Effect.succeed(serverConfig),
+  initialConfig: Effect.sync(() => currentServerConfig),
   subscribeServerConfig: () =>
-    subscribe([{ version: 1 as const, type: "snapshot" as const, config: serverConfig }]),
+    subscribe([{ version: 1 as const, type: "snapshot" as const, config: currentServerConfig }]),
   ready: Effect.void,
   probe: Effect.void,
   inboundFrames: Effect.succeed(0),
@@ -432,9 +472,27 @@ const encodedDescriptor = Schema.encodeSync(ExecutionEnvironmentDescriptor)(
   Schema.decodeUnknownSync(ExecutionEnvironmentDescriptor)(descriptor),
 );
 
+export interface FakeEnvironmentOptions {
+  /** In place of the one signed-in Codex. */
+  readonly providers?: ServerConfig["providers"];
+  readonly settings?: Partial<ServerConfig["settings"]>;
+  /** Answers terminal opens and writes and provider refreshes; `requestsTo` lists them. */
+  readonly answersTerminals?: boolean;
+}
+
 /** Serves the environment's HTTP API and these threads until disposed. */
-export function installFakeEnvironment(fixtures: ReadonlyArray<FakeThread>): Disposable {
+export function installFakeEnvironment(
+  fixtures: ReadonlyArray<FakeThread>,
+  options: FakeEnvironmentOptions = {},
+): Disposable {
   threads = fixtures;
+  currentServerConfig = {
+    ...serverConfig,
+    providers: options.providers ?? serverConfig.providers,
+    settings: { ...serverConfig.settings, ...options.settings },
+  };
+  answersTerminals = options.answersTerminals === true;
+  requests.clear();
   globalThis.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
     if (url.origin !== window.location.origin) return realFetch(input, init);
@@ -456,8 +514,16 @@ export function installFakeEnvironment(fixtures: ReadonlyArray<FakeThread>): Dis
     [Symbol.dispose]: () => {
       globalThis.fetch = realFetch;
       threads = [];
+      currentServerConfig = serverConfig;
+      answersTerminals = false;
+      requests.clear();
     },
   };
+}
+
+/** The payloads an install with `answersTerminals` received for `method`, in order. */
+export function requestsTo(method: string): ReadonlyArray<unknown> {
+  return requests.get(method) ?? [];
 }
 
 type ThreadEvent = Extract<OrchestrationV2ThreadStreamItem, { readonly kind: "event" }>["event"];
