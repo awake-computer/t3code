@@ -78,6 +78,25 @@ export interface AntigravityExecutable {
   readonly source: "override" | "managed" | "path";
   readonly version: string | null;
   readonly managedVersionDirectory: string | null;
+  /**
+   * `cli` for the Antigravity CLI, which serves ACP itself as `agy acp` from 1.5.0, on its own
+   * sign-in and with no harness; absent for the standalone ACP server.
+   */
+  readonly runtime?: "cli";
+}
+
+/** The Antigravity CLI's names: `agy`, its command, and `antigravity`, its archive's binary. */
+const CLI_NAMES: ReadonlySet<string> = new Set(["agy", "antigravity"]);
+
+/** Whether a binary path names the Antigravity CLI rather than the standalone ACP server. */
+export function isAntigravityCliPath(binaryPath: string | undefined): boolean {
+  const name = binaryPath
+    ?.trim()
+    .split(/[\\/]/u)
+    .pop()
+    ?.replace(/\.exe$/iu, "")
+    .toLowerCase();
+  return name !== undefined && CLI_NAMES.has(name);
 }
 
 interface AntigravityInstallationService {
@@ -272,6 +291,19 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
     } satisfies AntigravityExecutable;
   });
 
+  // The CLI runs as `agy acp` and keeps its own sign-in, so it needs no harness beside it.
+  const fromCli = Effect.fn("AntigravityInstallation.fromCli")(function* (candidate: string) {
+    if (!(yield* executableFile(candidate))) return null;
+    return {
+      executablePath: yield* fs.realPath(candidate),
+      harnessPath: "",
+      source: "override",
+      version: null,
+      managedVersionDirectory: null,
+      runtime: "cli",
+    } satisfies AntigravityExecutable;
+  });
+
   const pathCandidates = (binary: string, processEnvironment = environment) => {
     const pathValue =
       platform === "win32"
@@ -295,12 +327,16 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
             ? [path.resolve(override)]
             : pathCandidates(override, processEnvironment);
         for (const candidate of candidates) {
-          const selected = yield* fromExternal(candidate, "override");
+          const selected = isAntigravityCliPath(candidate)
+            ? yield* fromCli(candidate)
+            : yield* fromExternal(candidate, "override");
           if (selected) return selected;
         }
         return yield* installationError(
           "resolve",
-          "The custom Antigravity executable or its localharness_external sibling is missing or not executable.",
+          isAntigravityCliPath(override)
+            ? "The Antigravity CLI at the binary path is missing or not executable."
+            : "The custom Antigravity executable or its localharness_external sibling is missing or not executable.",
         );
       }
       if (yield* fs.exists(activePath)) {

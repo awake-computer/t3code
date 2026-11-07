@@ -21,6 +21,8 @@ import type { AntigravityAuth } from "../../provider/AntigravityAuth.ts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import {
   antigravityAppendsSystemPrompt,
+  antigravityCliPermissionMode,
+  antigravityCliRuntimeModeForSessionMode,
   antigravityPermissionMode,
   antigravityRuntimeModeForSessionMode,
   applyAntigravityAcpModelSelection,
@@ -72,6 +74,8 @@ const AntigravityProviderCapabilitiesV2 = {
 
 export interface AntigravityAdapterV2Options {
   readonly instanceId: ProviderInstanceId;
+  /** The Antigravity CLI's `agy acp`, whose session modes are its own. */
+  readonly cliRuntime?: boolean;
   readonly selfInvocation: SelfInvocation;
   readonly makeRuntime: (
     input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
@@ -247,8 +251,14 @@ export function makeAntigravityAcpAdapterFlavor(
         mapError: (cause) => cause,
       });
     }),
-    sessionModeForPolicy: (policy) => antigravityPermissionMode(policy.runtimeMode),
-    runtimeModeForSessionMode: antigravityRuntimeModeForSessionMode,
+    sessionModeForPolicy: (policy) =>
+      options.cliRuntime === true
+        ? antigravityCliPermissionMode(policy.runtimeMode)
+        : antigravityPermissionMode(policy.runtimeMode),
+    runtimeModeForSessionMode:
+      options.cliRuntime === true
+        ? antigravityCliRuntimeModeForSessionMode
+        : antigravityRuntimeModeForSessionMode,
     clientFileSystem: {
       readTextFile: (request, cwd) =>
         readAntigravityClientTextFile({

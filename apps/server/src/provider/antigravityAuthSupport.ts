@@ -464,6 +464,26 @@ export function buildAntigravityAcpSpawnInput(input: {
   };
 }
 
+/**
+ * The Antigravity CLI's own ACP server, `agy acp`, on the sign-in the CLI keeps in the user's own
+ * `~/.gemini`: no private profile, harness or browser helper, so a sign-in made in a terminal
+ * serves it, and nothing here signs in for it.
+ */
+export function buildAntigravityCliSpawnInput(input: {
+  readonly executablePath: string;
+  readonly cwd: string;
+  readonly baseEnv?: NodeJS.ProcessEnv;
+  readonly disableTelemetry?: boolean;
+}): AcpSessionRuntime.AcpSpawnInput {
+  return {
+    command: input.executablePath,
+    args: ["acp", ...(input.disableTelemetry === true ? ["--disable-telemetry"] : [])],
+    cwd: input.cwd,
+    env: { ...(input.baseEnv ?? process.env) },
+    extendEnv: false,
+  };
+}
+
 export const parseAntigravityAuthorizationUrl = Effect.fn("parseAntigravityAuthorizationUrl")(
   function* (
     authorizationUrl: string,

@@ -235,6 +235,27 @@ const expectPreviousRelease = Effect.fn("test.expectPreviousAntigravityRelease")
   expect((yield* installation.state).installedVersion).toBe(previousVersion);
 });
 
+it("tells the Antigravity CLI's binary path from the standalone server's", () => {
+  for (const binaryPath of [
+    "/opt/awake/bin/agy",
+    "agy",
+    "/usr/lib/agy/antigravity",
+    "C:\\agy\\agy.exe",
+    " agy ",
+  ]) {
+    expect(AntigravityInstallation.isAntigravityCliPath(binaryPath)).toBe(true);
+  }
+  for (const binaryPath of [
+    undefined,
+    "",
+    "/release/agy_acp_server.par",
+    "/opt/agy-wrapper",
+    "agy/acp",
+  ]) {
+    expect(AntigravityInstallation.isAntigravityCliPath(binaryPath)).toBe(false);
+  }
+});
+
 it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("Antigravity installation", (it) => {
   it.effect("reports missing Node before downloading the standalone provider runtime", () =>
     Effect.gen(function* () {
@@ -634,6 +655,48 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("Antigravity inst
         expect(
           yield* isolated.installation.resolve(executableName, { PATH: externalDirectory }),
         ).toMatchObject({ source: "override", executablePath: externalExecutable });
+      }),
+  );
+
+  // The mocked Linux PATH walk needs POSIX paths; Windows temp paths contain colons.
+  it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
+    "runs the Antigravity CLI at a binary path named agy, with no harness beside it",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fs
+          .makeTempDirectoryScoped({ prefix: "t3-agy-cli-test-" })
+          .pipe(Effect.flatMap((directory) => fs.realPath(directory)));
+        const binDirectory = path.join(baseDir, "bin");
+        const binary = path.join(baseDir, "cli", "antigravity");
+        const command = path.join(binDirectory, "agy");
+        yield* fs.makeDirectory(path.join(baseDir, "cli"));
+        yield* fs.makeDirectory(binDirectory);
+        yield* fs.writeFileString(binary, "antigravity cli", { mode: 0o755 });
+        yield* fs.symlink(binary, command);
+        const { installation } = yield* makeHarness({ baseDir, path: binDirectory });
+        expect(yield* installation.resolve(command)).toEqual({
+          executablePath: binary,
+          harnessPath: "",
+          source: "override",
+          version: null,
+          managedVersionDirectory: null,
+          runtime: "cli",
+        });
+        expect(yield* installation.resolve("agy", { PATH: binDirectory })).toMatchObject({
+          executablePath: binary,
+          runtime: "cli",
+        });
+        // With no binary path, the standalone server is looked for as before.
+        expect(yield* installation.resolve().pipe(Effect.flip)).toMatchObject({
+          operation: "resolve",
+        });
+        yield* fs.chmod(binary, 0o644);
+        expect(yield* installation.resolve(command).pipe(Effect.flip)).toMatchObject({
+          operation: "resolve",
+          detail: "The Antigravity CLI at the binary path is missing or not executable.",
+        });
       }),
   );
 

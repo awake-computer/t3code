@@ -66,6 +66,16 @@ Set **Binary path** to the ACP executable on the environment and update it yours
 Leave the field blank to use the managed runtime, or a compatible executable on
 `PATH` if no managed runtime is installed.
 
+### Use the Antigravity CLI
+
+From Antigravity CLI 1.5.0, the CLI serves ACP itself, as `agy acp`. Set **Binary
+path** to the CLI, `agy`, or the `antigravity` binary it runs, and T3 Code starts
+`agy acp` with no helper beside it, on the CLI's own sign-in. Sign in by running
+`agy` in a terminal, with any method it offers; T3 Code offers no sign-in for it,
+and the sign-in method settings above don't apply. Its modes are its own: Full
+access and Auto-accept edits run as `accept-edits`, Supervised and Auto as
+`default`, and T3 Code approves what it asks under Full access.
+
 ## Models and threads
 
 The model list comes from your Antigravity account, including Claude and GPT models

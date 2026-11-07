@@ -16,6 +16,9 @@ import type * as EffectAcpSchema from "effect-acp/compat";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import {
   applyAntigravityAcpModelSelection,
+  antigravityClientInfo,
+  antigravityCliPermissionMode,
+  antigravityCliRuntimeModeForSessionMode,
   antigravitySessionMeta,
   buildAntigravityPrompt,
   isQualifiedAntigravityRelease,
@@ -56,6 +59,25 @@ function makeModelRuntime(
     selections,
   };
 }
+
+describe("The Antigravity CLI's agy acp", () => {
+  it("runs each runtime mode in one of the CLI's own session modes, and reads them back", () => {
+    expect(antigravityCliPermissionMode("full-access")).toBe("accept-edits");
+    expect(antigravityCliPermissionMode("auto-accept-edits")).toBe("accept-edits");
+    expect(antigravityCliPermissionMode("auto")).toBe("default");
+    expect(antigravityCliPermissionMode("approval-required")).toBe("default");
+    expect(antigravityCliRuntimeModeForSessionMode("accept-edits")).toBe("auto-accept-edits");
+    expect(antigravityCliRuntimeModeForSessionMode("default")).toBe("approval-required");
+    expect(antigravityCliRuntimeModeForSessionMode("plan")).toBeUndefined();
+    expect(antigravityCliRuntimeModeForSessionMode("yolo")).toBeUndefined();
+  });
+
+  it("names Awake Chat to Google in Awake's build, never another client", () => {
+    expect(antigravityClientInfo(true)).toMatchObject({ name: "awake-chat" });
+    expect(antigravityClientInfo(true).version).not.toBe("");
+    expect(antigravityClientInfo(false)).toEqual({ name: "zed", version: "0.0.0" });
+  });
+});
 
 describe("Antigravity release gates", () => {
   it.each([

@@ -22,6 +22,7 @@ import {
   type AntigravityAuthConfig,
   type AntigravityProfile,
   buildAntigravityAcpSpawnInput,
+  buildAntigravityCliSpawnInput,
   isAntigravitySignInRequiredError,
   makeAntigravityStderrHandler,
   makeAntigravityStdoutTransform,
@@ -100,6 +101,33 @@ describe("Antigravity process environment", () => {
         TMPDIR: profile.tempDirectory,
       },
     });
+  });
+
+  it("runs the CLI's own ACP server in the user's environment, with no profile of T3 Code's", () => {
+    const baseEnv = {
+      HOME: "/home/developer",
+      PATH: "/opt/awake/bin:/usr/bin",
+      GEMINI_API_KEY: "kept-as-the-user-set-it",
+    };
+    const original = { ...baseEnv };
+    expect(
+      buildAntigravityCliSpawnInput({
+        executablePath: "/opt/awake/bin/agy",
+        cwd: "/project",
+        baseEnv,
+        disableTelemetry: true,
+      }),
+    ).toEqual({
+      command: "/opt/awake/bin/agy",
+      args: ["acp", "--disable-telemetry"],
+      cwd: "/project",
+      env: original,
+      extendEnv: false,
+    });
+    expect(baseEnv).toEqual(original);
+    expect(
+      buildAntigravityCliSpawnInput({ executablePath: "agy", cwd: "/project", baseEnv }).args,
+    ).toEqual(["acp"]);
   });
 
   it("passes only the configured method's credential and keeps the GCP pair out of the environment", () => {
