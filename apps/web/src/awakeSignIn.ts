@@ -16,11 +16,25 @@ import { appAtomRegistry } from "./rpc/atomRegistry";
 import { serverEnvironment } from "./state/server";
 import { knownTerminalSessionsAtom } from "./state/terminalSessions";
 
+type SignInCommand = (
+  provider: ServerProvider,
+  settings: ServerSettings,
+  platform: ExecutionEnvironmentPlatformOs,
+) => string;
+
 /**
- * Whether Awake's build offers Sign in for this provider: an agent a box runs, installed and on,
- * that reports no sign-in. Each signs in with its own CLI, never Chat's managed sign-in, which the
- * policy locks (FDD-0053 §6.5).
+ * Each agent's own CLI login, by driver, with the instance's binary: an agent offers Sign in only
+ * with a row here. A box has no browser of its own: Claude Code prints a link and takes back the
+ * code its page shows, and Codex uses a device code, since its default flow waits for a browser on
+ * the box's localhost. Chat's managed sign-in stays locked by the policy (FDD-0053 §6.5).
  */
+const AWAKE_SIGN_IN_COMMANDS: Readonly<Record<string, SignInCommand>> = {
+  claudeAgent: resolveOnboardingProviderLoginCommand,
+  codex: (provider, settings, platform) =>
+    `${resolveOnboardingProviderLoginCommand(provider, settings, platform)} --device-auth`,
+};
+
+/** Whether Awake's build offers Sign in: an agent with a login above, installed, on, signed out. */
 export function offersAwakeSignIn(
   provider: ServerProvider | null | undefined,
   awake = IS_AWAKE_BRAND,
@@ -28,7 +42,7 @@ export function offersAwakeSignIn(
   return (
     awake &&
     provider != null &&
-    (provider.driver === "claudeAgent" || provider.driver === "codex") &&
+    AWAKE_SIGN_IN_COMMANDS[provider.driver] !== undefined &&
     provider.enabled &&
     provider.status !== "disabled" &&
     provider.installed &&
@@ -36,25 +50,16 @@ export function offersAwakeSignIn(
   );
 }
 
-/**
- * The CLI's own sign-in for Awake's build, with the instance's binary. A box has no browser of its
- * own: Claude Code prints a link and takes back the code its page shows, and Codex uses a device
- * code, since its default flow waits for a browser on the box's localhost.
- */
+/** The command Sign in runs for this provider in Awake's build, or undefined with no row for it. */
 export function awakeSignInCommand(
   provider: ServerProvider,
   settings: ServerSettings,
   platform: ExecutionEnvironmentPlatformOs,
   awake = IS_AWAKE_BRAND,
 ): string | undefined {
-  if (!awake) return undefined;
-  if (provider.driver === "claudeAgent") {
-    return resolveOnboardingProviderLoginCommand(provider, settings, platform);
-  }
-  if (provider.driver === "codex") {
-    return `${resolveOnboardingProviderLoginCommand(provider, settings, platform)} --device-auth`;
-  }
-  return undefined;
+  return awake
+    ? AWAKE_SIGN_IN_COMMANDS[provider.driver]?.(provider, settings, platform)
+    : undefined;
 }
 
 /** A sign-in asked for where no thread shows, as in Settings, for the thread shown next to run. */
