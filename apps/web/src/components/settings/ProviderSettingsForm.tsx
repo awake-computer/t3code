@@ -3,6 +3,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   acceptsSecretReference,
+  isAntigravityCliPath,
   isSecretReference,
   isSecretSetting,
   type EnvironmentId,
@@ -89,6 +90,15 @@ function readFieldBooleanDefault(
   return Option.isSome(decoded) && typeof decoded.value === "boolean" ? decoded.value : undefined;
 }
 
+// The Antigravity CLI runs as `agy acp` on its own sign-in, so the instance's sign-in fields
+// don't apply to it.
+const ANTIGRAVITY_SIGN_IN_FIELDS: ReadonlySet<string> = new Set([
+  "authMethod",
+  "apiKey",
+  "gcpProject",
+  "gcpLocation",
+]);
+
 export function deriveProviderSettingsFields(
   definition: SettingsFormDefinition,
   value?: unknown,
@@ -96,6 +106,9 @@ export function deriveProviderSettingsFields(
   const isLocalAcp =
     definition.driverKind === "acpRegistry" &&
     readProviderConfigString(value, "source") === "local";
+  const isAntigravityCli =
+    definition.driverKind === "antigravity" &&
+    isAntigravityCliPath(readProviderConfigString(value, "binaryPath"));
   const schemaAnnotation = readProviderSettingsFormSchemaAnnotation(definition);
   const orderedKeys = new Map(
     (schemaAnnotation.order ?? []).map((key, index) => [key, index] as const),
@@ -115,6 +128,7 @@ export function deriveProviderSettingsFields(
       const formAnnotation = readProviderSettingsFormAnnotation(fieldSchema);
       if (formAnnotation.hidden) return [];
       if (isLocalAcp && key !== "source" && key !== "commandPath") return [];
+      if (isAntigravityCli && ANTIGRAVITY_SIGN_IN_FIELDS.has(key)) return [];
 
       const annotatedTitle = readFieldAnnotationString(fieldSchema, "title");
       const annotatedDescription = readFieldAnnotationString(fieldSchema, "description");

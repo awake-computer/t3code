@@ -1,6 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Effect has no incremental digest or free-space query.
 import * as EffectNodeStream from "@effect/platform-node/NodeStream";
-import { ProviderDriverKind, type ProviderInstallState } from "@t3tools/contracts";
+import {
+  isAntigravityCliPath,
+  ProviderDriverKind,
+  type ProviderInstallState,
+} from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveNodeExecutable, nodeRuntimeUnavailableMessage } from "@t3tools/shared/nodeRuntime";
 import * as Clock from "effect/Clock";
@@ -83,20 +87,6 @@ export interface AntigravityExecutable {
    * sign-in and with no harness; absent for the standalone ACP server.
    */
   readonly runtime?: "cli";
-}
-
-/** The Antigravity CLI's names: `agy`, its command, and `antigravity`, its archive's binary. */
-const CLI_NAMES: ReadonlySet<string> = new Set(["agy", "antigravity"]);
-
-/** Whether a binary path names the Antigravity CLI rather than the standalone ACP server. */
-export function isAntigravityCliPath(binaryPath: string | undefined): boolean {
-  const name = binaryPath
-    ?.trim()
-    .split(/[\\/]/u)
-    .pop()
-    ?.replace(/\.exe$/iu, "")
-    .toLowerCase();
-  return name !== undefined && CLI_NAMES.has(name);
 }
 
 interface AntigravityInstallationService {

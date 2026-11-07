@@ -6,6 +6,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   ANTIGRAVITY_AUTH_METHODS,
+  isAntigravityCliPath,
   type AntigravityAuthMethod,
   type EnvironmentId,
   type ProviderInstanceId,
@@ -72,6 +73,12 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
       />
       {props.notAllowed !== undefined ? (
         <SettingsRow title={props.notAllowed} />
+      ) : isAntigravityCliPath(props.binaryPath) ? (
+        // The CLI's `agy acp` keeps its own sign-in and needs no runtime of T3 Code's.
+        <SettingsRow
+          title="Antigravity CLI"
+          description="Signs in with its own agy, run in a terminal, by any method it offers."
+        />
       ) : props.readOnly ? (
         <SettingsRow title="Setup unavailable" description="Provider setup is read-only." />
       ) : props.provider?.setup === undefined ? (

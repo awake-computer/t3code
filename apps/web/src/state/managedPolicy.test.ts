@@ -57,22 +57,15 @@ describe("providerUnavailableLine", () => {
     limits: { providers: { allowedDrivers: [claude] } },
   };
 
-  it("names who keeps a provider out: Awake for Antigravity in its build, else the org", () => {
-    expect(providerUnavailableLine(onlyClaude, antigravity, "Awake Chat")).toBe(
-      "Not available in Awake Chat",
-    );
-    expect(providerUnavailableLine(onlyClaude, codex, "Awake Chat")).toBe(
-      "Not allowed by Example Corp",
-    );
-    expect(providerUnavailableLine(onlyClaude, antigravity, undefined)).toBe(
-      "Not allowed by Example Corp",
-    );
+  it("names the organization that keeps a provider out, Antigravity as any other", () => {
+    expect(providerUnavailableLine(onlyClaude, antigravity)).toBe("Not allowed by Example Corp");
+    expect(providerUnavailableLine(onlyClaude, codex)).toBe("Not allowed by Example Corp");
   });
 
   it("says nothing of a provider the policy allows, or without a policy", () => {
-    expect(providerUnavailableLine(onlyClaude, claude, "Awake Chat")).toBeUndefined();
-    expect(providerUnavailableLine(policy, antigravity, "Awake Chat")).toBeUndefined();
-    expect(providerUnavailableLine(undefined, antigravity, "Awake Chat")).toBeUndefined();
+    expect(providerUnavailableLine(onlyClaude, claude)).toBeUndefined();
+    expect(providerUnavailableLine(policy, antigravity)).toBeUndefined();
+    expect(providerUnavailableLine(undefined, antigravity)).toBeUndefined();
   });
 });
 

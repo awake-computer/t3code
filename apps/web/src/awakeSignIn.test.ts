@@ -44,6 +44,14 @@ const signedOutCodex: ServerProvider = {
   version: "0.160.0",
   message: "Codex CLI is not authenticated. Run `codex login` and try again.",
 };
+const signedOutAntigravity: ServerProvider = {
+  ...signedOutClaude,
+  instanceId: ProviderInstanceId.make("antigravity"),
+  driver: ProviderDriverKind.make("antigravity"),
+  displayName: "Antigravity",
+  version: "1.5.2",
+  message: "Sign in to Antigravity in Settings before you continue.",
+};
 
 describe("awakeSignInCommand", () => {
   it("runs each agent's own login, Codex's with a device code, in Awake's build only", () => {
@@ -58,6 +66,24 @@ describe("awakeSignInCommand", () => {
     expect(
       awakeSignInCommand(signedOutClaude, DEFAULT_SERVER_SETTINGS, "linux", false),
     ).toBeUndefined();
+  });
+
+  it("signs Antigravity in with the CLI's own agy, at the binary path the policy pins", () => {
+    expect(awakeSignInCommand(signedOutAntigravity, DEFAULT_SERVER_SETTINGS, "linux", true)).toBe(
+      "agy",
+    );
+    const settings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      providerInstances: {
+        [signedOutAntigravity.instanceId]: {
+          driver: signedOutAntigravity.driver,
+          config: { binaryPath: "/opt/awake/bin/agy" },
+        },
+      },
+    };
+    expect(awakeSignInCommand(signedOutAntigravity, settings, "linux", true)).toBe(
+      "/opt/awake/bin/agy",
+    );
   });
 
   it("signs in with the instance's own binary", () => {
@@ -89,8 +115,7 @@ describe("offersAwakeSignIn", () => {
     ).toBe(false);
     expect(offersAwakeSignIn({ ...signedOutClaude, installed: false }, true)).toBe(false);
     expect(offersAwakeSignIn({ ...signedOutClaude, enabled: false }, true)).toBe(false);
-    const antigravity = { ...signedOutClaude, driver: ProviderDriverKind.make("antigravity") };
-    expect(offersAwakeSignIn(antigravity, true)).toBe(false);
+    expect(offersAwakeSignIn(signedOutAntigravity, true)).toBe(true);
     expect(offersAwakeSignIn(undefined, true)).toBe(false);
   });
 });

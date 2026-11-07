@@ -37,22 +37,16 @@ export function firstManagedDenial(
   return undefined;
 }
 
-// Awake runs Antigravity in no box, whatever an organization allows (FDD-0053 §6.5).
-const OUT_OF_AWAKE_DRIVERS: ReadonlySet<string> = new Set(["antigravity"]);
-
 /**
  * What a provider the policy forbids says in place of the controls that would turn it on, or
- * undefined when it may run. `awakeApp` names Awake's build, which speaks for Awake's own locks.
+ * undefined when it may run.
  */
 export function providerUnavailableLine(
   policy: ManagedPolicySummary | undefined,
   driver: ProviderDriverKind,
-  awakeApp: string | undefined,
 ): string | undefined {
   if (policy === undefined || isManagedDriverAllowed(policy, driver)) return undefined;
-  return awakeApp !== undefined && OUT_OF_AWAKE_DRIVERS.has(driver)
-    ? `Not available in ${awakeApp}`
-    : `Not allowed by ${policy.organization}`;
+  return `Not allowed by ${policy.organization}`;
 }
 
 /** What a mode above the policy's ceiling reads where it is offered, or undefined when allowed. */

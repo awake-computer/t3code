@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Layer from "effect/Layer";
 import { expect, it } from "@effect/vitest";
+import { isAntigravityCliPath } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
@@ -243,7 +244,7 @@ it("tells the Antigravity CLI's binary path from the standalone server's", () =>
     "C:\\agy\\agy.exe",
     " agy ",
   ]) {
-    expect(AntigravityInstallation.isAntigravityCliPath(binaryPath)).toBe(true);
+    expect(isAntigravityCliPath(binaryPath)).toBe(true);
   }
   for (const binaryPath of [
     undefined,
@@ -252,7 +253,7 @@ it("tells the Antigravity CLI's binary path from the standalone server's", () =>
     "/opt/agy-wrapper",
     "agy/acp",
   ]) {
-    expect(AntigravityInstallation.isAntigravityCliPath(binaryPath)).toBe(false);
+    expect(isAntigravityCliPath(binaryPath)).toBe(false);
   }
 });
 

@@ -1,20 +1,28 @@
 import type { KnownTerminalSession } from "@t3tools/client-runtime/state/terminal";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
-import type {
-  EnvironmentId,
-  ExecutionEnvironmentPlatformOs,
-  ProviderInstanceId,
-  ServerProvider,
-  ServerSettings,
-  ThreadId,
+import {
+  AntigravitySettings,
+  type EnvironmentId,
+  type ExecutionEnvironmentPlatformOs,
+  type ProviderInstanceId,
+  type ServerProvider,
+  type ServerSettings,
+  type ThreadId,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { create } from "zustand";
 
 import { IS_AWAKE_BRAND } from "./branding";
-import { resolveOnboardingProviderLoginCommand } from "./onboarding/providerReadiness.logic";
+import {
+  quoteProviderBinary,
+  resolveOnboardingProviderLoginCommand,
+} from "./onboarding/providerReadiness.logic";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 import { serverEnvironment } from "./state/server";
 import { knownTerminalSessionsAtom } from "./state/terminalSessions";
+
+const decodeAntigravitySettings = Schema.decodeUnknownOption(AntigravitySettings);
 
 type SignInCommand = (
   provider: ServerProvider,
@@ -32,6 +40,14 @@ const AWAKE_SIGN_IN_COMMANDS: Readonly<Record<string, SignInCommand>> = {
   claudeAgent: resolveOnboardingProviderLoginCommand,
   codex: (provider, settings, platform) =>
     `${resolveOnboardingProviderLoginCommand(provider, settings, platform)} --device-auth`,
+  // `agy acp` runs on the CLI's own sign-in (FDD-0053 §6.12), made by `agy`, by any method.
+  antigravity: (provider, settings, platform) => {
+    const config = decodeAntigravitySettings(
+      settings.providerInstances[provider.instanceId]?.config ?? {},
+    );
+    const binaryPath = Option.isSome(config) ? config.value.binaryPath : "";
+    return quoteProviderBinary(binaryPath || "agy", "agy", platform);
+  },
 };
 
 /** Whether Awake's build offers Sign in: an agent with a login above, installed, on, signed out. */

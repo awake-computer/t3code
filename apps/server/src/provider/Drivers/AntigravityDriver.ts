@@ -1,5 +1,10 @@
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { AntigravitySettings, ProviderDriverKind, ProviderSetupError } from "@t3tools/contracts";
+import {
+  AntigravitySettings,
+  isAntigravityCliPath,
+  ProviderDriverKind,
+  ProviderSetupError,
+} from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
 import {
@@ -123,7 +128,7 @@ export const AntigravityDriver: ProviderDriver<
     const settings = { ...config, enabled } satisfies AntigravitySettings;
     // The Antigravity CLI at the binary path runs as `agy acp`, on the CLI's own sign-in, so this
     // instance's sign-in settings don't apply to it, and T3 Code signs in for it in no way.
-    const cliRuntime = AntigravityInstallation.isAntigravityCliPath(settings.binaryPath);
+    const cliRuntime = isAntigravityCliPath(settings.binaryPath);
     const auth: AntigravityAuthConfig = {
       authMethod: settings.authMethod,
       apiKey: settings.apiKey,

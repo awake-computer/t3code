@@ -66,15 +66,15 @@ describe("ProviderEnabledSwitch", () => {
         onChange={onChange}
       />
     );
-    await using screen = await render(row(false, "Not available in Awake Chat"));
-    await expect.element(screen.getByText("Not available in Awake Chat")).toBeVisible();
+    await using screen = await render(row(false, "Not allowed by Northwind"));
+    await expect.element(screen.getByText("Not allowed by Northwind")).toBeVisible();
     expect(screen.container.querySelector('[role="switch"]')).toBeNull();
 
     // Unstyled here, the switch has no size, so this checks its state rather than clicking it.
     const toggle = screen.getByRole("switch", { name: "Enable Antigravity" });
-    await screen.rerender(row(true, "Not available in Awake Chat"));
+    await screen.rerender(row(true, "Not allowed by Northwind"));
     await expect.element(toggle).toHaveAttribute("aria-checked", "true");
-    expect(screen.container.textContent).not.toContain("Not available in Awake Chat");
+    expect(screen.container.textContent).not.toContain("Not allowed by Northwind");
 
     await screen.rerender(row(false, undefined));
     await expect.element(toggle).toHaveAttribute("aria-checked", "false");

@@ -54,7 +54,6 @@ import {
   providerUnavailableLine,
   useManagedPolicy,
 } from "../../state/managedPolicy";
-import { APP_BASE_NAME, IS_AWAKE_BRAND } from "../../branding";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type {
@@ -804,11 +803,7 @@ export function ProviderInstanceCard({
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
   const managedPolicy = useManagedPolicy(environmentId);
   const instanceLocks = managedInstanceLocks(managedPolicy, instance.driver);
-  const unavailableLine = providerUnavailableLine(
-    managedPolicy,
-    instance.driver,
-    IS_AWAKE_BRAND ? APP_BASE_NAME : undefined,
-  );
+  const unavailableLine = providerUnavailableLine(managedPolicy, instance.driver);
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({

@@ -93,7 +93,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { providerUnavailableLine, useManagedPolicy } from "~/state/managedPolicy";
-import { APP_BASE_NAME, IS_AWAKE_BRAND } from "~/branding";
 import { offersAwakeSignIn, useAwakeSignInStore } from "~/awakeSignIn";
 import { useNavigateToMainApp } from "../sidebar/mainAppLocation";
 import { ExpandableText } from "./ExpandableText";
@@ -1273,11 +1272,7 @@ function ProviderInstanceRow({
 }) {
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
-  const notAllowed = providerUnavailableLine(
-    useManagedPolicy(environmentId),
-    driver,
-    IS_AWAKE_BRAND ? APP_BASE_NAME : undefined,
-  );
+  const notAllowed = providerUnavailableLine(useManagedPolicy(environmentId), driver);
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const navigateToMainApp = useNavigateToMainApp();
   // Awake's Sign in runs in a thread's terminal drawer, so it leaves Settings for the thread.

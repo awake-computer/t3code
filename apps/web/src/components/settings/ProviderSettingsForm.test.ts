@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  AntigravitySettings,
   makeProviderSettingsSchema,
   ProviderDriverKind,
   SettingsSecretValue,
@@ -32,6 +33,24 @@ describe("ProviderSettingsForm helpers", () => {
       { key: "token", secret: true, acceptsSecretReference: undefined },
       { key: "apiKey", secret: true, acceptsSecretReference: true },
     ]);
+  });
+
+  it("leaves out an Antigravity instance's sign-in fields when it runs the Antigravity CLI", () => {
+    const definition = {
+      driverKind: ProviderDriverKind.make("antigravity"),
+      settingsSchema: AntigravitySettings,
+    };
+    const keys = (value: unknown) =>
+      deriveProviderSettingsFields(definition, value).map(({ key }) => key);
+    expect(keys({ binaryPath: "/opt/awake/bin/agy" })).toEqual(["binaryPath"]);
+    expect(keys({ binaryPath: "/release/agy_acp_server.par" })).toEqual([
+      "authMethod",
+      "apiKey",
+      "gcpProject",
+      "gcpLocation",
+      "binaryPath",
+    ]);
+    expect(keys({})).toEqual(["authMethod", "apiKey", "gcpProject", "gcpLocation", "binaryPath"]);
   });
 
   it("preserves unknown config keys while omitting empty configurable fields", () => {
