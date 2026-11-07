@@ -18,6 +18,8 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/compat";
 
+import packageJson from "../../../package.json" with { type: "json" };
+import { awakeBuild } from "../../config.ts";
 import {
   makeAntigravityStderrHandler,
   makeAntigravityStdoutTransform,
@@ -47,6 +49,11 @@ export interface AntigravityAcpRuntimeInput extends Omit<
   /** Conversational sessions only; helpers and probes leave the system prompt untouched. */
   readonly sessionSystemPromptAppend?: string;
   readonly authMethod?: AntigravityAuthMethod;
+  /**
+   * The Antigravity CLI's `agy acp`, which keeps its own sign-in: nothing here authenticates for
+   * it, and a session it can't open for want of one says the user must sign in to the CLI.
+   */
+  readonly cliRuntime?: boolean;
 }
 
 function parseAntigravityVersion(version: string | null | undefined) {
@@ -106,6 +113,17 @@ export function antigravitySessionMeta(
   return Object.keys(antigravity).length === 0 ? undefined : { antigravity };
 }
 
+/**
+ * The client T3 Code says it is. The standalone server offered models other than Gemini only to
+ * editors it lists, such as Zed; Awake's build names itself in every case, since it must never say
+ * it is another client.
+ */
+export function antigravityClientInfo(awake = awakeBuild) {
+  return awake
+    ? { name: "awake-chat", version: packageJson.version }
+    : { name: "zed", version: "0.0.0" };
+}
+
 export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(function* (
   input: AntigravityAcpRuntimeInput,
 ): Effect.fn.Return<
@@ -117,11 +135,11 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
     AcpSessionRuntime.layer({
       ...input,
       authMethodId: input.authMethod ?? "oauth-personal",
-      authenticateEagerly: true,
+      authenticateEagerly: input.cliRuntime !== true,
+      ...(input.cliRuntime === true ? { authenticateOnAuthRequired: false } : {}),
       resumeMethod: "resume",
       cancelBehavior: "wait-for-prompt",
-      // The agent offers non-Gemini models only to allowlisted clients such as Zed.
-      clientInfo: { name: "zed", version: "0.0.0" },
+      clientInfo: antigravityClientInfo(),
       sessionMeta: (initializeResult) =>
         antigravitySessionMeta(initializeResult, input.sessionSystemPromptAppend),
       clientCapabilities: {
@@ -158,6 +176,33 @@ export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
     case "auto":
     case "approval-required":
       return "default";
+  }
+}
+
+/**
+ * The Antigravity CLI's session mode for a runtime mode. `agy acp` has `default`, `accept-edits`
+ * and `plan`, and no mode that approves everything: under Full access T3 Code approves its asks.
+ */
+export function antigravityCliPermissionMode(runtimeMode: RuntimeMode): string {
+  switch (runtimeMode) {
+    case "full-access":
+    case "auto-accept-edits":
+      return "accept-edits";
+    case "auto":
+    case "approval-required":
+      return "default";
+  }
+}
+
+/** The runtime mode a CLI session mode grants; the inverse of `antigravityCliPermissionMode`. */
+export function antigravityCliRuntimeModeForSessionMode(modeId: string): RuntimeMode | undefined {
+  switch (modeId) {
+    case "accept-edits":
+      return "auto-accept-edits";
+    case "default":
+      return "approval-required";
+    default:
+      return undefined;
   }
 }
 

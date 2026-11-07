@@ -25,6 +25,7 @@ import {
   isAntigravityTextGenerationAvailable,
   makeAntigravityTextGeneration,
 } from "../../textGeneration/AntigravityTextGeneration.ts";
+import { awakeBuild } from "../../config.ts";
 import { makeAntigravityAuth, type AntigravityAuth } from "../AntigravityAuth.ts";
 import * as AntigravityInstallation from "../AntigravityInstallation.ts";
 import * as AntigravityUsage from "./AntigravityUsage.ts";
@@ -33,6 +34,7 @@ import {
   antigravityAuthLabel,
   antigravityAuthUsesBrowser,
   buildAntigravityAcpSpawnInput,
+  buildAntigravityCliSpawnInput,
   isAntigravitySignInRequiredError,
   prepareAntigravityProfile,
   resolveAntigravityInstanceDirectories,
@@ -119,13 +121,16 @@ export const AntigravityDriver: ProviderDriver<
     const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
     const makeNativeLogger = yield* makeAcpNativeLoggerFactory();
     const settings = { ...config, enabled } satisfies AntigravitySettings;
+    // The Antigravity CLI at the binary path runs as `agy acp`, on the CLI's own sign-in, so this
+    // instance's sign-in settings don't apply to it, and T3 Code signs in for it in no way.
+    const cliRuntime = AntigravityInstallation.isAntigravityCliPath(settings.binaryPath);
     const auth: AntigravityAuthConfig = {
       authMethod: settings.authMethod,
       apiKey: settings.apiKey,
       gcpProject: settings.gcpProject,
       gcpLocation: settings.gcpLocation,
     };
-    const authConfigIssue = antigravityAuthConfigIssue(auth);
+    const authConfigIssue = cliRuntime ? null : antigravityAuthConfigIssue(auth);
     const processEnvironment = yield* mergeProviderInstanceEnvironment(environment);
     const userHome = resolveAntigravityUserHome(
       yield* HostProcess.Platform,
@@ -200,6 +205,32 @@ export const AntigravityDriver: ProviderDriver<
             }),
         ),
       );
+      if (executable.runtime === "cli") {
+        const { onAuthorizationUrl: _signIn, ...cliInput } = input;
+        const runtime = yield* makeAntigravityAcpRuntime({
+          ...cliInput,
+          runtimeVersion: executable.version,
+          cliRuntime: true,
+          childProcessSpawner: spawner,
+          spawn: buildAntigravityCliSpawnInput({
+            executablePath: executable.executablePath,
+            cwd: input.cwd,
+            baseEnv: processEnvironment,
+            disableTelemetry: awakeBuild,
+          }),
+        }).pipe(Effect.provideService(SecureRandom.SecureRandom, random));
+        return {
+          ...runtime,
+          start: () =>
+            runtime
+              .start()
+              .pipe(
+                Effect.tapError((cause): Effect.Effect<void> =>
+                  isAntigravitySignInRequiredError(cause) ? provider.onAuthRequired : Effect.void,
+                ),
+              ),
+        };
+      }
       const profile = yield* prepareAntigravityProfile({
         profileDirectory,
         baseEnv: processEnvironment,
@@ -413,7 +444,10 @@ export const AntigravityDriver: ProviderDriver<
       probe,
       probeUsage: usage.probe,
       clearUsage: usage.clear,
-      auth: { type: auth.authMethod, label: antigravityAuthLabel(auth.authMethod) },
+      auth: {
+        type: auth.authMethod,
+        label: cliRuntime ? "Antigravity CLI" : antigravityAuthLabel(auth.authMethod),
+      },
       supportsTextGeneration: isAntigravityTextGenerationAvailable(profileDirectory).pipe(
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
@@ -433,6 +467,7 @@ export const AntigravityDriver: ProviderDriver<
     const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
     const orchestrationAdapter = yield* makeAntigravityAdapterV2({
       instanceId,
+      cliRuntime,
       selfInvocation,
       makeRuntime,
       withProcess: authFlow.withProcess,
@@ -540,7 +575,8 @@ export const AntigravityDriver: ProviderDriver<
             ),
       orchestrationAdapter,
       textGeneration,
-      auth: authFlow.controller,
+      // The CLI signs in in a terminal, with its own command, never through T3 Code.
+      ...(cliRuntime ? {} : { auth: authFlow.controller }),
       refreshModels,
     } satisfies ProviderInstance;
   }),
