@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  BROWSER_READY_MESSAGE,
+  consoleBrowserLink,
   consoleThemeMessage,
+  isBoxLocalLink,
   isSessionEndedAnswer,
   SESSION_ENDED_MESSAGE,
   takeBootTheme,
@@ -42,5 +45,41 @@ describe("protocol v1 with Awake's console", () => {
       state: "failed",
       code: "stream.session_ended",
     });
+  });
+
+  it("takes a link for its browser only to the box's own addresses, from exactly the console", () => {
+    const link = (origin: string, data: unknown) =>
+      consoleBrowserLink({ origin, data }, consoleOrigin);
+    for (const url of [
+      "http://localhost:5173/",
+      "https://localhost:8443/checkout?step=2#pay",
+      "http://app.localhost:3000/",
+      "http://127.0.0.1:8080/",
+      "http://127.1.2.3/",
+      "http://[::1]:4000/",
+    ]) {
+      expect(isBoxLocalLink(url)).toBe(true);
+      expect(link(consoleOrigin, { awake: "chat", browser: url })).toBe(url);
+    }
+    for (const url of [
+      "http://0.0.0.0:3000/",
+      "http://10.0.0.5:3000/",
+      "https://example.com/",
+      "http://localhost.example.com/",
+      "http://user:secret@localhost:5173/",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "localhost:5173",
+      `http://localhost/${"x".repeat(2048)}`,
+    ]) {
+      expect(isBoxLocalLink(url)).toBe(false);
+      expect(link(consoleOrigin, { awake: "chat", browser: url })).toBeUndefined();
+    }
+    const v1 = { awake: "chat", browser: "http://localhost:5173/" };
+    expect(link("https://other.example", v1)).toBeUndefined();
+    expect(link(consoleOrigin, { browser: "http://localhost:5173/" })).toBeUndefined();
+    expect(consoleBrowserLink({ origin: consoleOrigin, data: v1 }, undefined)).toBeUndefined();
+    expect(link(consoleOrigin, BROWSER_READY_MESSAGE)).toBeUndefined();
+    expect(BROWSER_READY_MESSAGE).toEqual({ awake: "chat", browser: "ready" });
   });
 });

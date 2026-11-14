@@ -13,6 +13,7 @@ import { AtomRegistry } from "effect/reactivity";
 import * as Stream from "effect/Stream";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { awakeConsoleWebLinks } from "../../awakeConsole";
 import { openFileInPreview, openUrlInPreview } from "../../browser/openFileInPreview";
 import { isPreviewAvailableFor } from "../../browser/previewRuntime";
 import { requestConfirmDialog } from "../../confirmDialog";
@@ -94,7 +95,8 @@ export function DesktopWebLinkCoordinator() {
   const httpBaseUrl = useEnvironmentHttpBaseUrl(primaryEnvironment?.environmentId ?? null);
   const queueRef = useRef(Promise.resolve());
   const pairedUrlsRef = useRef(new Set<string>());
-  const webLinks = window.desktopBridge?.webLinks;
+  // Awake: in Awake Chat, the console hands it links to the box's own addresses (FDD-0060 §5.4).
+  const webLinks = window.desktopBridge?.webLinks ?? awakeConsoleWebLinks();
   // A sync IPC read; the setting only changes across a relaunch.
   const [localEnvironmentDisabled] = useState(isLocalEnvironmentDisabled);
   // With Local environment disabled there is no primary to wait for, so links run against the

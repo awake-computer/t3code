@@ -1,4 +1,4 @@
-import { awakeConsoleOriginFrom, type EnvironmentId } from "@t3tools/contracts";
+import { awakeConsoleOriginFrom, type DesktopBridge, type EnvironmentId } from "@t3tools/contracts";
 
 import { IS_AWAKE_BRAND, MATCH_AWAKE_THEME_ID } from "./branding";
 import { readThemePreference, setAppearanceMode } from "./hooks/useTheme";
@@ -43,6 +43,80 @@ export function consoleThemeMessage(
   if (typeof data !== "object" || data === null) return undefined;
   const fields = data as Record<string, unknown>;
   return fields.awake === "chat" ? consoleThemeFrom(fields.theme) : undefined;
+}
+
+/** What Chat posts the console once it can open a link in its browser (protocol v1). */
+export const BROWSER_READY_MESSAGE = { awake: "chat", browser: "ready" } as const;
+
+/** The longest link the console may hand Chat's browser. */
+const MAX_BROWSER_LINK = 2048;
+
+/**
+ * Whether a link is to one of the box's own addresses, http or https with no user or password:
+ * localhost, a name under .localhost, 127.0.0.0/8 or [::1] (FDD-0060 §5.4).
+ */
+export function isBoxLocalLink(value: string): boolean {
+  if (value.length > MAX_BROWSER_LINK) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  if (url.username !== "" || url.password !== "") return false;
+  const host = url.hostname;
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "[::1]" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+  );
+}
+
+/** The link a message hands Chat's browser, only protocol v1's from exactly the console's origin. */
+export function consoleBrowserLink(
+  message: { readonly origin: string; readonly data: unknown },
+  consoleOrigin: string | undefined,
+): string | undefined {
+  if (consoleOrigin === undefined || message.origin !== consoleOrigin) return undefined;
+  const { data } = message;
+  if (typeof data !== "object" || data === null) return undefined;
+  const { awake, browser } = data as Record<string, unknown>;
+  return awake === "chat" && typeof browser === "string" && isBoxLocalLink(browser)
+    ? browser
+    : undefined;
+}
+
+let consoleLinks: DesktopBridge["webLinks"] | null | undefined;
+
+/**
+ * The console's links in the desktop bridge's shape, so T3 Code's own link coordinator opens them
+ * in its browser as it opens a desktop app's. One for the page, and only embedded in the console.
+ */
+export function awakeConsoleWebLinks(): DesktopBridge["webLinks"] | undefined {
+  if (consoleLinks !== undefined) return consoleLinks ?? undefined;
+  consoleLinks = null;
+  if (!IS_AWAKE_BRAND || window.parent === window) return undefined;
+  const parent = window.parent;
+  const consoleOrigin = () =>
+    awakeConsoleOriginFrom(appAtomRegistry.get(primaryServerConfigAtom)?.awakeConsoleOrigin);
+  consoleLinks = {
+    onOpen: (listener) => {
+      const receive = (event: MessageEvent) => {
+        if (event.source !== parent) return;
+        const link = consoleBrowserLink(event, consoleOrigin());
+        if (link !== undefined) listener(link);
+      };
+      window.addEventListener("message", receive);
+      return () => window.removeEventListener("message", receive);
+    },
+    setReady: async (ready) => {
+      const origin = consoleOrigin();
+      if (ready && origin !== undefined) parent.postMessage(BROWSER_READY_MESSAGE, origin);
+    },
+  };
+  return consoleLinks;
 }
 
 /** Whether an answer from the box's host is the gateway ending this session. */
