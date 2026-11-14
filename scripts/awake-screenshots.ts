@@ -325,6 +325,8 @@ interface View {
   readonly open: (page: Page) => Promise<void>;
   /** The widths it's captured at, where not every one. */
   readonly widths?: ReadonlyArray<number>;
+  /** Captured after every other view, since it starts a thread of its own. */
+  readonly last?: boolean;
 }
 
 function views(input: {
@@ -349,6 +351,7 @@ function views(input: {
       // the box's own address (FDD-0060 §5.4), beside the thread.
       name: "browser",
       widths: [1440, 1024],
+      last: true,
       open: async (page) => {
         await page.goto(CONSOLE_ORIGIN);
         const chat = page.frameLocator("#chat");
@@ -361,8 +364,12 @@ function views(input: {
             .catch(() => false) ?? Promise.resolve(false);
         await waitFor(pageShown, "the dev server's page in Chat's Browser panel", 120_000);
         await chat.locator("body").waitFor({ timeout: 10_000 });
-        // The panel draws the page from the server's stream, frame by frame.
+        // The panel draws the page from the server's stream, frame by frame; nothing keeps focus,
+        // so no tooltip shows.
         await page.waitForTimeout(3_000);
+        await chat
+          .locator("body")
+          .evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.mouse.move(1, 1);
       },
     },
@@ -537,44 +544,45 @@ try {
       threadId,
       pullRequestTitle: title,
     });
-    for (const theme of THEMES) {
-      for (const viewport of WIDTHS) {
-        const context = await browser.newContext({
-          storageState,
-          viewport,
-          colorScheme: theme.colorScheme,
-          reducedMotion: "reduce",
-        });
-        const page = await context.newPage();
-        page.on("pageerror", (error) => pageErrors.push(redact(error.message)));
-        page.on("console", (message) => {
-          if (message.type() === "error") pageErrors.push(redact(message.text()));
-        });
-        for (const view of capture) {
-          if (view.widths && !view.widths.includes(viewport.width)) continue;
-          const name = `${view.name}-${theme.name}-${String(viewport.width)}.png`;
-          try {
-            await view.open(page);
-            await page.evaluate("document.fonts.ready.then(() => true)");
-            await page.waitForTimeout(500);
-            await page.screenshot({ path: NodePath.join(out, name), animations: "disabled" });
-            captured.push(name);
-          } catch (error) {
-            fail(name, error);
-            const shown = await page
-              .evaluate("document.body.innerText.slice(0, 1500)")
-              .catch(() => "");
-            const deep = await page.evaluate(DEEP_DUMP).catch(() => "");
-            console.error(`[awake-screenshots] ${page.url()} showed:\n${redact(String(shown))}`);
-            console.error(`[awake-screenshots] beneath it:\n${redact(String(deep))}`);
-            await page
-              .screenshot({ path: NodePath.join(out, `FAILED-${name}`) })
-              .catch(() => undefined);
+    for (const pass of [capture.filter((view) => !view.last), capture.filter((view) => view.last)])
+      for (const theme of THEMES) {
+        for (const viewport of WIDTHS) {
+          const context = await browser.newContext({
+            storageState,
+            viewport,
+            colorScheme: theme.colorScheme,
+            reducedMotion: "reduce",
+          });
+          const page = await context.newPage();
+          page.on("pageerror", (error) => pageErrors.push(redact(error.message)));
+          page.on("console", (message) => {
+            if (message.type() === "error") pageErrors.push(redact(message.text()));
+          });
+          for (const view of pass) {
+            if (view.widths && !view.widths.includes(viewport.width)) continue;
+            const name = `${view.name}-${theme.name}-${String(viewport.width)}.png`;
+            try {
+              await view.open(page);
+              await page.evaluate("document.fonts.ready.then(() => true)");
+              await page.waitForTimeout(500);
+              await page.screenshot({ path: NodePath.join(out, name), animations: "disabled" });
+              captured.push(name);
+            } catch (error) {
+              fail(name, error);
+              const shown = await page
+                .evaluate("document.body.innerText.slice(0, 1500)")
+                .catch(() => "");
+              const deep = await page.evaluate(DEEP_DUMP).catch(() => "");
+              console.error(`[awake-screenshots] ${page.url()} showed:\n${redact(String(shown))}`);
+              console.error(`[awake-screenshots] beneath it:\n${redact(String(deep))}`);
+              await page
+                .screenshot({ path: NodePath.join(out, `FAILED-${name}`) })
+                .catch(() => undefined);
+            }
           }
+          await context.close();
         }
-        await context.close();
       }
-    }
   } finally {
     await browser.close();
   }
