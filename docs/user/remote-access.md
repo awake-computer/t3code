@@ -313,6 +313,24 @@ For a systemd service, add `Environment=T3CODE_SERVER_BROWSER_SANDBOX=0` under
 your T3 service. Setting the variable in an agent's terminal does not change the
 environment of an already running T3 server.
 
+### A browser of your own, and a proxy
+
+To run a headless shell the host already has in place of T3 Code's download, set
+`T3CODE_SERVER_BROWSER_EXECUTABLE` to its absolute path in the **T3 server's
+environment**. Browser tabs and HTML previews then use it, and T3 Code downloads
+no browser: a path that isn't an executable file is an error, not a reason to
+fetch another. Keep it a Chrome for Testing headless shell of the version T3 Code
+pins, or close to it.
+
+Where the server reaches the internet only through a proxy, set `HTTPS_PROXY`,
+and `NO_PROXY` for hosts reached directly. Browser tabs go through that proxy,
+and reach `localhost` and the rest of loopback directly whatever `NO_PROXY` says,
+so a dev server on the host still opens. HTML previews reach public addresses
+through it by name, and still never reach a local one.
+
+Awake Chat, Awake's build, sets all three in every box, with the box's own
+browser, and turns Chrome's sandbox off there, the box being the boundary.
+
 ## Connect an outside agent
 
 Claude Code, Codex, ChatGPT and other agents T3 Code did not start can drive
