@@ -79,6 +79,150 @@ const domainTarget = (host: string, port: number) => {
   return target;
 };
 
+// Awake: a stand-in for a box's Egress Proxy. It answers each CONNECT with `status`, records the
+// request's head, and echoes what follows a 200.
+const standInProxy = (status: string) =>
+  Effect.acquireRelease(
+    Effect.callback<{
+      readonly server: NodeNet.Server;
+      readonly port: number;
+      readonly requests: Array<string>;
+      readonly sockets: Set<NodeNet.Socket>;
+    }>((resume) => {
+      const requests: Array<string> = [];
+      const sockets = new Set<NodeNet.Socket>();
+      const server = NodeNet.createServer((socket) => {
+        sockets.add(socket);
+        socket.on("error", () => {});
+        let head = "";
+        const onData = (chunk: Buffer) => {
+          head += chunk.toString("latin1");
+          const end = head.indexOf("\r\n\r\n");
+          if (end === -1) return;
+          socket.off("data", onData);
+          requests.push(head.slice(0, end));
+          socket.write(`HTTP/1.1 ${status}\r\n\r\n`);
+          if (status.startsWith("200 ")) socket.pipe(socket);
+          else socket.end();
+        };
+        socket.on("data", onData);
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address() as NodeNet.AddressInfo;
+        resume(Effect.succeed({ server, port: address.port, requests, sockets }));
+      });
+    }),
+    ({ server, sockets }) =>
+      Effect.callback<void>((resume) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(() => resume(Effect.void));
+      }),
+  );
+
+// The environment each render's proxy reads when it starts, for this test alone.
+const withEnvironment = (env: Readonly<Record<string, string>>) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      for (const name of ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"]) {
+        vi.stubEnv(name, env[name] ?? "");
+      }
+    }),
+    () => Effect.sync(() => vi.unstubAllEnvs()),
+  );
+
+const throughProxy = (proxyPort: number, extra: Readonly<Record<string, string>> = {}) =>
+  withEnvironment({
+    HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+    NO_PROXY: "localhost,127.0.0.1",
+    ...extra,
+  }).pipe(Effect.andThen(publicProxy));
+
+const echoOf = (socket: NodeNet.Socket, text: string) =>
+  Effect.callback<string>((resume) => {
+    socket.once("data", (chunk) => resume(Effect.succeed(chunk.toString("latin1"))));
+    socket.write(text);
+  });
+
+describe("publicProxy through the environment's proxy", () => {
+  it.effect("reaches a name it can't resolve through HTTPS_PROXY, by name", () =>
+    Effect.gen(function* () {
+      const proxy = yield* standInProxy("200 Connection established");
+      const port = yield* throughProxy(proxy.port);
+      const { code, socket } = yield* connectThrough(
+        port,
+        domainTarget("pages.example.invalid", 443),
+      );
+      expect(code).toBe(0);
+      expect(yield* echoOf(socket, "hello")).toBe("hello");
+      socket.destroy();
+      expect(proxy.requests).toEqual([
+        "CONNECT pages.example.invalid:443 HTTP/1.1\r\nHost: pages.example.invalid:443",
+      ]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses what the proxy refuses", () =>
+    Effect.gen(function* () {
+      const proxy = yield* standInProxy("403 Forbidden");
+      const port = yield* throughProxy(proxy.port);
+      const { code, socket } = yield* connectThrough(
+        port,
+        domainTarget("pages.example.invalid", 443),
+      );
+      socket.destroy();
+      expect(code).toBe(2);
+      expect(proxy.requests).toHaveLength(1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("never sends a local target to the proxy", () =>
+    Effect.gen(function* () {
+      const proxy = yield* standInProxy("200 Connection established");
+      const port = yield* throughProxy(proxy.port, { NO_PROXY: "" });
+      for (const target of [
+        ipv4Target("127.0.0.1", 80),
+        ipv4Target("10.1.2.3", 80),
+        ipv6Target("64:ff9b::a00:1", 80),
+        domainTarget("localhost", 80),
+        domainTarget("app.localhost", 80),
+      ]) {
+        const { code, socket } = yield* connectThrough(port, target);
+        socket.destroy();
+        expect(code).toBe(2);
+      }
+      expect(proxy.requests).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reaches NO_PROXY's hosts directly, as before", () =>
+    Effect.gen(function* () {
+      const proxy = yield* standInProxy("200 Connection established");
+      const port = yield* throughProxy(proxy.port, { NO_PROXY: ".internal.invalid" });
+      const { code, socket } = yield* connectThrough(
+        port,
+        domainTarget("api.internal.invalid", 443),
+      );
+      socket.destroy();
+      expect(code).toBe(2);
+      expect(proxy.requests).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses every target when the proxy named isn't one it can use", () =>
+    Effect.gen(function* () {
+      const port = yield* withEnvironment({ HTTPS_PROXY: "socks5://127.0.0.1:1" }).pipe(
+        Effect.andThen(publicProxy),
+      );
+      const { code, socket } = yield* connectThrough(
+        port,
+        domainTarget("pages.example.invalid", 443),
+      );
+      socket.destroy();
+      expect(code).toBe(1);
+    }).pipe(Effect.scoped),
+  );
+});
+
 describe("publicProxy", () => {
   it.effect("refuses loopback and private targets, by address or by name", () =>
     Effect.gen(function* () {

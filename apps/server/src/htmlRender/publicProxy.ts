@@ -86,6 +86,84 @@ const publicAddresses = async (host: string) => {
   return local ? undefined : addresses;
 };
 
+// Awake: a name is local when it's localhost or this machine's resolver answers it with a local
+// address. One it can't resolve, as a box's resolver can't a public name, is the proxy's to resolve.
+const resolvesLocally = async (host: string) => {
+  const name = host.toLowerCase().replace(/\.$/, "");
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  const addresses = await NodeDnsPromises.lookup(name, { all: true, verbatim: true }).catch(
+    () => [],
+  );
+  return addresses.some(({ address, family }) => isLocal(address, family));
+};
+
+/**
+ * Awake: the HTTP proxy the server's environment names, HTTPS_PROXY, which renders reach the internet
+ * through where a host has no direct way out, and NO_PROXY's hosts, which they reach directly, as
+ * before. `url` is null for a proxy named in a form this can't use, so nothing goes around it.
+ */
+interface UpstreamProxy {
+  readonly url: URL | null;
+  readonly direct: ReadonlyArray<string>;
+}
+
+const proxyUrl = (named: string) => {
+  try {
+    const url = new URL(named.includes("://") ? named : `http://${named}`);
+    return url.protocol === "http:" && url.hostname !== "" ? url : null;
+  } catch {
+    return null;
+  }
+};
+
+const upstreamProxy = (env: NodeJS.ProcessEnv): UpstreamProxy | undefined => {
+  const named = (env.HTTPS_PROXY ?? env.https_proxy)?.trim();
+  if (!named) return undefined;
+  const direct = (env.NO_PROXY ?? env.no_proxy ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+  if (direct.includes("*")) return undefined;
+  return { url: proxyUrl(named), direct };
+};
+
+// A NO_PROXY entry: a host or an IP address, or a domain that covers its subdomains, with or without
+// a leading `.` or `*.`, any of them with a port.
+const noProxyEntry = (entry: string): { readonly host: string; readonly port?: number } => {
+  const bracketed = /^\[([^\]]+)\](?::(\d+))?$/.exec(entry);
+  if (bracketed) {
+    return bracketed[2] === undefined
+      ? { host: bracketed[1]! }
+      : { host: bracketed[1]!, port: Number(bracketed[2]) };
+  }
+  if (NodeNet.isIPv6(entry)) return { host: entry };
+  const at = /^(.*?)(?::(\d+))?$/.exec(entry);
+  return at?.[2] === undefined ? { host: entry } : { host: at[1]!, port: Number(at[2]) };
+};
+
+const reachedDirectly = (direct: ReadonlyArray<string>, host: string, port: number) => {
+  const name = host.toLowerCase().replace(/\.$/, "");
+  return direct.some((entry) => {
+    const rule = noProxyEntry(entry);
+    if (rule.port !== undefined && rule.port !== port) return false;
+    const domain = rule.host.replace(/^\*?\./, "");
+    return name === domain || name.endsWith(`.${domain}`);
+  });
+};
+
+const MAX_PROXY_HEAD_BYTES = 16 * 1024;
+
+// The request that opens a tunnel to host:port through the proxy, with its credentials when it names any.
+const connectRequest = (proxy: URL, host: string, port: number) => {
+  const authority = NodeNet.isIPv6(host) ? `[${host}]:${port}` : `${host}:${port}`;
+  const credentials = proxy.username
+    ? `Proxy-Authorization: Basic ${Buffer.from(
+        `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`,
+      ).toString("base64")}\r\n`
+    : "";
+  return `CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n${credentials}\r\n`;
+};
+
 // SOCKS5 (RFC 1928) replies: success, refused by rule, host unreachable, command unsupported.
 const reply = (code: number) => Buffer.from([5, code, 0, 1, 0, 0, 0, 0, 0, 0]);
 
@@ -120,6 +198,8 @@ export const publicProxy = Effect.acquireRelease(
     Error
   >((resume) => {
     const sockets = new Set<NodeNet.Socket>();
+    // Awake: read when each render's proxy starts, as the browser it serves is.
+    const through = upstreamProxy(process.env);
     const track = (socket: NodeNet.Socket) => {
       sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
@@ -155,6 +235,61 @@ export const publicProxy = Effect.acquireRelease(
           early.push(chunk);
         };
         client.on("data", holdEarly);
+        // Awake: through the environment's proxy, by name, where it names one and NO_PROXY doesn't
+        // list the host. Local targets are refused first, as for a direct connection.
+        if (through !== undefined && !reachedDirectly(through.direct, request.host, request.port)) {
+          const proxy = through.url;
+          const family = NodeNet.isIP(request.host);
+          void (
+            family === 0
+              ? resolvesLocally(request.host)
+              : Promise.resolve(isLocal(request.host, family))
+          ).then((local) => {
+            if (client.destroyed) return;
+            client.off("data", holdEarly);
+            if (local) return refuse(client, 2);
+            if (proxy === null) return refuse(client, 1);
+            client.pause();
+            const upstream = track(
+              NodeNet.connect({
+                host: proxy.hostname.replace(/^\[(.*)\]$/, "$1"),
+                port: Number(proxy.port) || 80,
+              }),
+            );
+            const closeClient = () => client.destroy();
+            upstream.once("connect", () =>
+              upstream.write(connectRequest(proxy, request.host, request.port)),
+            );
+            let head = Buffer.alloc(0);
+            const onHead = (chunk: Buffer) => {
+              head = Buffer.concat([head, chunk]);
+              const end = head.indexOf("\r\n\r\n");
+              if (end === -1) {
+                if (head.length > MAX_PROXY_HEAD_BYTES) upstream.destroy();
+                return;
+              }
+              upstream.off("data", onHead);
+              const status = /^HTTP\/1\.[01] (\d{3})/.exec(
+                head.subarray(0, end).toString("latin1"),
+              )?.[1];
+              if (status !== "200") {
+                upstream.off("close", closeClient);
+                upstream.destroy();
+                return refuse(client, status === "403" ? 2 : 4);
+              }
+              client.write(reply(0));
+              const rest = head.subarray(end + 4);
+              if (rest.length > 0) client.write(rest);
+              for (const chunk of early) upstream.write(chunk);
+              upstream.pipe(client);
+              client.pipe(upstream);
+            };
+            upstream.on("data", onHead);
+            upstream.on("close", closeClient);
+            client.on("close", () => upstream.destroy());
+          });
+          return;
+        }
         void publicAddresses(request.host).then((addresses) => {
           if (client.destroyed) return;
           client.off("data", holdEarly);
