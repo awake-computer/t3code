@@ -352,16 +352,39 @@ function views(input: {
       name: "browser",
       last: true,
       open: async (page) => {
-        await page.goto(CONSOLE_ORIGIN);
         const chat = page.frameLocator("#chat");
+        const chatFrame = () => page.frames().find((frame) => frame.url().startsWith(origin));
         const pageShown = () =>
-          page
-            .frames()
-            .find((frame) => frame.url().startsWith(origin))
+          chatFrame()
             ?.evaluate(deepTextCheck(DEV_PAGE_TITLE))
             .then((value) => value === true)
             .catch(() => false) ?? Promise.resolve(false);
-        await waitFor(pageShown, "the dev server's page in Chat's Browser panel", 120_000);
+        // First as a cold Chat takes the link, at its first load; what it shows is logged when
+        // the page doesn't come, and the capture goes on as a Chat that has loaded before.
+        await page.goto(CONSOLE_ORIGIN);
+        const seen: Array<string> = [];
+        const cold = async () => {
+          if (await pageShown()) return true;
+          const frame = chatFrame();
+          const text = await frame
+            ?.evaluate("document.body.innerText.replace(/\\s+/g, ' ').slice(0, 300)")
+            .catch(() => "");
+          const said = `${frame?.url() ?? "no frame"}: ${String(text)}`;
+          if (!seen.includes(said) && seen.length < 12) seen.push(said);
+          return false;
+        };
+        const warm = await waitFor(cold, "a cold Chat to open the link", 40_000).then(
+          () => false,
+          () => true,
+        );
+        if (warm) {
+          console.error(
+            `[awake-screenshots] a cold Chat, given the link, showed:\n${redact(seen.join("\n"))}`,
+          );
+          await openThread(page);
+          await page.goto(CONSOLE_ORIGIN);
+          await waitFor(pageShown, "the dev server's page in Chat's Browser panel", 120_000);
+        }
         await chat.locator("body").waitFor({ timeout: 10_000 });
         // The panel draws the page from the server's stream, frame by frame; nothing keeps focus,
         // so no tooltip shows.
