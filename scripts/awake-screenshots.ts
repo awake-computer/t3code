@@ -391,7 +391,12 @@ function views(input: {
         await page.waitForTimeout(3_000);
         await chat
           .locator("body")
-          .evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+          // The scripts compile without the DOM's types, so the page's document is named by shape.
+          .evaluate(() =>
+            (
+              globalThis as unknown as { document: { activeElement: { blur?: () => void } | null } }
+            ).document.activeElement?.blur?.(),
+          );
         await page.mouse.move(1, 1);
       },
     },
