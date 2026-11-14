@@ -4,6 +4,7 @@
 // the run fails if any of them never showed what it waits for.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
+import * as NodeHttp from "node:http";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
@@ -37,6 +38,37 @@ const DIFF_MARK = "Good to see you";
 const SIGNED_OUT_MARK = "opens a terminal here and runs";
 // The box names the agent by its driver: "Claude".
 const SIGN_IN = "Sign in to Claude";
+// A dev server an agent started on the box, which Awake's console opens in Chat's Browser panel
+// (Awake's FDD-0060 §5.4).
+const DEV_SERVER_PORT = 5173;
+const DEV_SERVER_URL = `http://localhost:${String(DEV_SERVER_PORT)}/`;
+const DEV_PAGE_TITLE = "Pricing · Acme";
+const DEV_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${DEV_PAGE_TITLE}</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;margin:0;color:#1d1d1f;background:#fafaf7}
+header{padding:20px 40px;border-bottom:1px solid #e5e5e0;font-weight:600}
+main{padding:40px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px}
+section{border:1px solid #e5e5e0;border-radius:12px;padding:24px;background:#fff}
+h2{margin:0 0 8px;font-size:18px}.price{font-size:32px;font-weight:700;margin:8px 0}
+button{margin-top:12px;padding:8px 16px;border-radius:8px;border:0;background:#1d1d1f;color:#fff}</style></head>
+<body><header>Acme</header><main>
+<section><h2>Starter</h2><div class="price">$0</div><p>For trying it out.</p><button>Start</button></section>
+<section><h2>Team</h2><div class="price">$24</div><p>Per member, each month.</p><button>Choose Team</button></section>
+<section><h2>Enterprise</h2><div class="price">Talk to us</div><p>SSO, SCIM and audit.</p><button>Contact sales</button></section>
+</main></body></html>`;
+
+// The browser Playwright installed for this run, which the server's browser runs in place of its
+// own download, as a box's image names its own (Awake's T3CODE_SERVER_BROWSER_EXECUTABLE).
+function installedHeadlessShell(): string | undefined {
+  const cache = NodePath.join(process.env.HOME ?? "", ".cache", "ms-playwright");
+  const builds = NodeFS.existsSync(cache) ? NodeFS.readdirSync(cache) : [];
+  for (const build of builds.filter((name) => name.startsWith("chromium_headless_shell-"))) {
+    for (const platform of ["chrome-headless-shell-linux64", "chrome-headless-shell-linux-arm64"]) {
+      const shell = NodePath.join(cache, build, platform, "chrome-headless-shell");
+      if (NodeFS.existsSync(shell)) return shell;
+    }
+  }
+  return undefined;
+}
 
 // Whether the page shows `text`, inside shadow roots too, where the diff draws its lines.
 const deepTextCheck = (text: string) => `(() => {
@@ -91,9 +123,12 @@ const baseEnv: Record<string, string> = {
   T3CODE_TELEMETRY_ENABLED: "false",
 };
 // The box names the environment, and the server reads pull requests with the job's own token.
+const headlessShell = installedHeadlessShell();
 const serverEnv: Record<string, string> = {
   ...baseEnv,
   AWAKE_BOX_NAME: "maya-chen",
+  T3CODE_SERVER_BROWSER_SANDBOX: "0",
+  ...(headlessShell ? { T3CODE_SERVER_BROWSER_EXECUTABLE: headlessShell } : {}),
   ...(process.env.GH_TOKEN ? { GH_TOKEN: process.env.GH_TOKEN } : {}),
 };
 
@@ -270,6 +305,8 @@ async function pullRequestTitle(): Promise<string> {
 interface View {
   readonly name: string;
   readonly open: (page: Page) => Promise<void>;
+  /** The widths it's captured at, where not every one. */
+  readonly widths?: ReadonlyArray<number>;
 }
 
 function views(input: {
@@ -289,6 +326,29 @@ function views(input: {
   });
   return [
     { name: "thread", open: openThread },
+    {
+      // Chat's Browser panel on a dev server's page, as Awake's console opens a terminal's link to
+      // the box's own address (FDD-0060 §5.4), beside the thread.
+      name: "browser",
+      widths: [1440, 1024],
+      open: async (page) => {
+        await openThread(page);
+        await page.keyboard.press("Control+Shift+J");
+        const address = page.getByPlaceholder("Search or enter URL").first();
+        await address.waitFor({ timeout: 30_000 });
+        await address.fill(DEV_SERVER_URL);
+        await address.press("Enter");
+        const pageShown = () =>
+          page
+            .evaluate(deepTextCheck(DEV_PAGE_TITLE))
+            .then((value) => value === true)
+            .catch(() => false);
+        await waitFor(pageShown, "the dev server's page in the Browser panel", 90_000);
+        // The panel draws the page from the server's stream, frame by frame.
+        await page.waitForTimeout(3_000);
+        await page.mouse.move(1, 1);
+      },
+    },
     {
       name: "pull-request",
       open: async (page) => {
@@ -379,6 +439,12 @@ t3(["project", "add", pullRequestRepo, "--title", "T3 Code"]);
 // As boxd does on a box's first chat: Awake's palettes, published as the theme "awake".
 t3(["theme", "set", NodePath.resolve(options.theme), "--id", "awake"]);
 
+const devServer = NodeHttp.createServer((_request, response) => {
+  response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  response.end(DEV_PAGE);
+});
+await new Promise<void>((resolve) => devServer.listen(DEV_SERVER_PORT, "127.0.0.1", resolve));
+
 // Kept whole and redacted once, so no token can straddle two chunks.
 const serverOutput: Array<string> = [];
 const server = NodeChildProcess.spawn(
@@ -463,6 +529,7 @@ try {
           if (message.type() === "error") pageErrors.push(redact(message.text()));
         });
         for (const view of capture) {
+          if (view.widths && !view.widths.includes(viewport.width)) continue;
           const name = `${view.name}-${theme.name}-${String(viewport.width)}.png`;
           try {
             await view.open(page);
@@ -492,13 +559,15 @@ try {
 } catch (error) {
   fail("seeding the server", error);
 } finally {
+  devServer.close();
   server.kill("SIGTERM");
   NodeFS.writeFileSync(NodePath.join(out, "server.log"), redact(serverOutput.join("")));
   const summary = { captured, failures, pageErrors };
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
 
-const expected = THEMES.length * WIDTHS.length * 7;
+// Seven views at every width, and the Browser panel's at the two wide ones.
+const expected = THEMES.length * (WIDTHS.length * 7 + 2);
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");
