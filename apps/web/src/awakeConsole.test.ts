@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   BROWSER_READY_MESSAGE,
@@ -6,6 +6,8 @@ import {
   consoleThemeMessage,
   isBoxLocalLink,
   isSessionEndedAnswer,
+  LANDING_WAIT_MS,
+  leftTheIndex,
   SESSION_ENDED_MESSAGE,
   takeBootTheme,
 } from "./awakeConsole";
@@ -81,5 +83,37 @@ describe("protocol v1 with Awake's console", () => {
     expect(consoleBrowserLink({ origin: consoleOrigin, data: v1 }, undefined)).toBeUndefined();
     expect(link(consoleOrigin, BROWSER_READY_MESSAGE)).toBeUndefined();
     expect(BROWSER_READY_MESSAGE).toEqual({ awake: "chat", browser: "ready" });
+  });
+
+  it("says it's ready for a link once it has left its index, or after its wait", async () => {
+    vi.useFakeTimers();
+    try {
+      const settled = (pathname: () => string) => {
+        const state = { done: false };
+        void leftTheIndex(pathname).then(() => {
+          state.done = true;
+        });
+        return state;
+      };
+      let path = "/";
+      const landing = settled(() => path);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(landing.done).toBe(false);
+      path = "/draft/d1";
+      await vi.advanceTimersByTimeAsync(100);
+      expect(landing.done).toBe(true);
+
+      const onAThread = settled(() => "/env/thread");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onAThread.done).toBe(true);
+
+      const stuck = settled(() => "/");
+      await vi.advanceTimersByTimeAsync(LANDING_WAIT_MS - 200);
+      expect(stuck.done).toBe(false);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(stuck.done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

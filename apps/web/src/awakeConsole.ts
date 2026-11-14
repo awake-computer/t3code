@@ -88,6 +88,33 @@ export function consoleBrowserLink(
     : undefined;
 }
 
+/** How long Chat waits to leave its index before it says it's ready anyway, as with no project. */
+export const LANDING_WAIT_MS = 10_000;
+const LANDING_POLL_MS = 100;
+
+/**
+ * Resolves once Chat has left its index, or after LANDING_WAIT_MS. The index starts a draft in the
+ * latest project as Chat loads, and a link handed over meanwhile races that navigation and isn't
+ * opened, so Chat tells the console it's ready only after.
+ */
+export function leftTheIndex(
+  pathname: () => string = () => window.location.pathname,
+  limitMs = LANDING_WAIT_MS,
+): Promise<void> {
+  return new Promise((resolve) => {
+    let polls = Math.ceil(limitMs / LANDING_POLL_MS);
+    const check = () => {
+      if (pathname() !== "/" || polls <= 0) {
+        resolve();
+        return;
+      }
+      polls -= 1;
+      setTimeout(check, LANDING_POLL_MS);
+    };
+    check();
+  });
+}
+
 let consoleLinks: DesktopBridge["webLinks"] | null | undefined;
 
 /**
@@ -112,8 +139,10 @@ export function awakeConsoleWebLinks(): DesktopBridge["webLinks"] | undefined {
       return () => window.removeEventListener("message", receive);
     },
     setReady: async (ready) => {
+      if (!ready) return;
+      await leftTheIndex();
       const origin = consoleOrigin();
-      if (ready && origin !== undefined) parent.postMessage(BROWSER_READY_MESSAGE, origin);
+      if (origin !== undefined) parent.postMessage(BROWSER_READY_MESSAGE, origin);
     },
   };
   return consoleLinks;
