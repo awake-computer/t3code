@@ -56,6 +56,23 @@ button{margin-top:12px;padding:8px 16px;border-radius:8px;border:0;background:#1
 <section><h2>Enterprise</h2><div class="price">Talk to us</div><p>SSO, SCIM and audit.</p><button>Contact sales</button></section>
 </main></body></html>`;
 
+// A stand-in for Awake's console: a page at the console's origin that frames Awake Chat, as the
+// workspace's Chat tab does, and hands it a terminal's link once Chat says it can open one (protocol
+// v1's {awake: "chat", browser}), as the workspace's Open in box browser does.
+const CONSOLE_PORT = 5199;
+const CONSOLE_ORIGIN = `http://127.0.0.1:${String(CONSOLE_PORT)}`;
+const consolePage = (chat: string) => `<!doctype html><html><head><meta charset="utf-8">
+<style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head>
+<body><iframe id="chat" src="${chat}/"></iframe><script>
+const chat = document.getElementById("chat");
+addEventListener("message", (event) => {
+  if (event.source !== chat.contentWindow || event.origin !== ${JSON.stringify(chat)}) return;
+  if (event.data && event.data.awake === "chat" && event.data.browser === "ready") {
+    chat.contentWindow.postMessage({ awake: "chat", browser: ${JSON.stringify(DEV_SERVER_URL)} }, event.origin);
+  }
+});
+</script></body></html>`;
+
 // The browser Playwright installed for this run, which the server's browser runs in place of its
 // own download, as a box's image names its own (Awake's T3CODE_SERVER_BROWSER_EXECUTABLE).
 function installedHeadlessShell(): string | undefined {
@@ -128,6 +145,7 @@ const serverEnv: Record<string, string> = {
   ...baseEnv,
   AWAKE_BOX_NAME: "maya-chen",
   T3CODE_SERVER_BROWSER_SANDBOX: "0",
+  AWAKE_CONSOLE_ORIGIN: CONSOLE_ORIGIN,
   ...(headlessShell ? { T3CODE_SERVER_BROWSER_EXECUTABLE: headlessShell } : {}),
   ...(process.env.GH_TOKEN ? { GH_TOKEN: process.env.GH_TOKEN } : {}),
 };
@@ -332,18 +350,17 @@ function views(input: {
       name: "browser",
       widths: [1440, 1024],
       open: async (page) => {
-        await openThread(page);
-        await page.keyboard.press("Control+Shift+J");
-        const address = page.getByPlaceholder("Search or enter URL").first();
-        await address.waitFor({ timeout: 30_000 });
-        await address.fill(DEV_SERVER_URL);
-        await address.press("Enter");
+        await page.goto(CONSOLE_ORIGIN);
+        const chat = page.frameLocator("#chat");
         const pageShown = () =>
           page
-            .evaluate(deepTextCheck(DEV_PAGE_TITLE))
+            .frames()
+            .find((frame) => frame.url().startsWith(origin))
+            ?.evaluate(deepTextCheck(DEV_PAGE_TITLE))
             .then((value) => value === true)
-            .catch(() => false);
-        await waitFor(pageShown, "the dev server's page in the Browser panel", 90_000);
+            .catch(() => false) ?? Promise.resolve(false);
+        await waitFor(pageShown, "the dev server's page in Chat's Browser panel", 120_000);
+        await chat.locator("body").waitFor({ timeout: 10_000 });
         // The panel draws the page from the server's stream, frame by frame.
         await page.waitForTimeout(3_000);
         await page.mouse.move(1, 1);
@@ -444,6 +461,11 @@ const devServer = NodeHttp.createServer((_request, response) => {
   response.end(DEV_PAGE);
 });
 await new Promise<void>((resolve) => devServer.listen(DEV_SERVER_PORT, "127.0.0.1", resolve));
+const consoleServer = NodeHttp.createServer((_request, response) => {
+  response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  response.end(consolePage(origin));
+});
+await new Promise<void>((resolve) => consoleServer.listen(CONSOLE_PORT, "127.0.0.1", resolve));
 
 // Kept whole and redacted once, so no token can straddle two chunks.
 const serverOutput: Array<string> = [];
@@ -560,6 +582,7 @@ try {
   fail("seeding the server", error);
 } finally {
   devServer.close();
+  consoleServer.close();
   server.kill("SIGTERM");
   NodeFS.writeFileSync(NodePath.join(out, "server.log"), redact(serverOutput.join("")));
   const summary = { captured, failures, pageErrors };
