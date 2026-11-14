@@ -123,6 +123,33 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
   return { browser, fs, path, baseDir, installRoot, requests };
 });
 
+// Awake: a host's own browser, which T3 runs in place of the download.
+const makeConfigured = Effect.fn("test.makeConfiguredPreviewBrowser")(function* (
+  executable: (baseDir: string) => string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-preview-browser-test-" });
+  const requests: Array<string> = [];
+  const browser = yield* PreviewBrowser.makePreviewBrowser({
+    baseDir,
+    executable: executable(baseDir),
+  }).pipe(
+    Effect.provideService(HostProcess.Platform, hostPlatform),
+    Effect.provideService(HostProcess.Architecture, "x64"),
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.make((request) =>
+        Effect.sync(() => {
+          requests.push(request.url);
+          return HttpClientResponse.fromWeb(request, new Response(null, { status: 500 }));
+        }),
+      ),
+    ),
+  );
+  return { browser, fs, path, baseDir, requests };
+});
+
 it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("PreviewBrowser", (it) => {
   it.effect.each(["0.8.0", "1.2.3"])("retains another version when installing %s", (current) =>
     Effect.gen(function* () {
@@ -155,6 +182,39 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("PreviewBrowser",
       expect(yield* browser.executable).toBe(executable);
       expect(yield* browser.installed).toEqual(Option.some(executable));
       expect(requests).toHaveLength(1);
+    }),
+  );
+
+  it.effect("runs the executable the host names and downloads nothing", () =>
+    Effect.gen(function* () {
+      const shell = (baseDir: string) => `${baseDir}/browser/${executableName}`;
+      const { browser, fs, path, baseDir, requests } = yield* makeConfigured(shell);
+      yield* fs.makeDirectory(path.join(baseDir, "browser"));
+      yield* fs.writeFileString(shell(baseDir), "#!/bin/sh\n");
+      yield* fs.chmod(shell(baseDir), 0o755);
+
+      expect(yield* browser.executable).toBe(shell(baseDir));
+      expect(yield* browser.installed).toEqual(Option.some(shell(baseDir)));
+      expect(yield* fs.exists(path.join(baseDir, "tools"))).toBe(false);
+      expect(requests).toEqual([]);
+    }),
+  );
+
+  it.effect.each([
+    { name: "is missing", executable: (baseDir: string) => `${baseDir}/missing` },
+    { name: "is a relative path", executable: () => executableName },
+    { name: "is a directory", executable: (baseDir: string) => baseDir },
+  ])("refuses an executable that $name, and downloads nothing in its place", (testCase) =>
+    Effect.gen(function* () {
+      const { browser, fs, path, baseDir, requests } = yield* makeConfigured(testCase.executable);
+
+      const error = yield* browser.executable.pipe(Effect.flip);
+
+      expect(error._tag).toBe("PreviewBrowserMissingError");
+      expect(error.message).toContain("T3CODE_SERVER_BROWSER_EXECUTABLE");
+      expect(yield* browser.installed).toEqual(Option.none());
+      expect(yield* fs.exists(path.join(baseDir, "tools"))).toBe(false);
+      expect(requests).toEqual([]);
     }),
   );
 

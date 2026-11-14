@@ -130,3 +130,51 @@ describe("diagnoseLaunchFailure", () => {
     }),
   );
 });
+
+describe("browserProxy", () => {
+  it("takes no proxy when the environment names none", () => {
+    expect(PreviewBrowserHost.browserProxy({})).toBeUndefined();
+    expect(
+      PreviewBrowserHost.browserProxy({ HTTPS_PROXY: "  ", NO_PROXY: "a.test" }),
+    ).toBeUndefined();
+  });
+
+  it("goes through HTTPS_PROXY with loopback first, then NO_PROXY's hosts", () => {
+    expect(
+      PreviewBrowserHost.browserProxy({
+        HTTPS_PROXY: "http://egress.awake:3128",
+        NO_PROXY: "mint.awake, localhost,10.0.16.53",
+      }),
+    ).toEqual({
+      server: "http://egress.awake:3128",
+      bypass: "localhost,127.0.0.1,[::1],*.localhost,mint.awake,10.0.16.53",
+    });
+  });
+
+  it("reads the lower-case names too, and keeps loopback with no NO_PROXY at all", () => {
+    expect(PreviewBrowserHost.browserProxy({ https_proxy: "http://egress.awake:3128" })).toEqual({
+      server: "http://egress.awake:3128",
+      bypass: "localhost,127.0.0.1,[::1],*.localhost",
+    });
+  });
+
+  it("takes no proxy when NO_PROXY is *", () => {
+    expect(
+      PreviewBrowserHost.browserProxy({ HTTPS_PROXY: "http://egress.awake:3128", NO_PROXY: "*" }),
+    ).toBeUndefined();
+  });
+});
+
+describe("configuredExecutable", () => {
+  it("names the browser T3CODE_SERVER_BROWSER_EXECUTABLE sets, or none", () => {
+    expect(PreviewBrowserHost.configuredExecutable({})).toBeUndefined();
+    expect(
+      PreviewBrowserHost.configuredExecutable({ T3CODE_SERVER_BROWSER_EXECUTABLE: " " }),
+    ).toBeUndefined();
+    expect(
+      PreviewBrowserHost.configuredExecutable({
+        T3CODE_SERVER_BROWSER_EXECUTABLE: "/usr/local/bin/chrome-headless-shell",
+      }),
+    ).toBe("/usr/local/bin/chrome-headless-shell");
+  });
+});

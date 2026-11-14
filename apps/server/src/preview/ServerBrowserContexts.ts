@@ -7,7 +7,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import type { Browser, BrowserContext, CDPSession } from "playwright-core";
 
-import { sandboxDisabled } from "./PreviewBrowserHost.ts";
+import { browserProxy, sandboxDisabled } from "./PreviewBrowserHost.ts";
 
 // Playwright needs its files on disk. createRequire also resolves it from a Node SEA executable.
 const requirePlaywright = NodeModule.createRequire(import.meta.url);
@@ -88,6 +88,8 @@ export class ServerBrowserContexts {
   private async launchOptions() {
     const executable = await this.options.executable();
     const env = this.options.env ?? process.env;
+    // Awake: through the proxy the environment names, where a host has no direct way out.
+    const proxy = browserProxy(env);
     return {
       executable,
       env,
@@ -100,6 +102,7 @@ export class ServerBrowserContexts {
       headless: true,
       // Only an explicit operator opt-out disables sandboxing. Launch errors never do.
       chromiumSandbox: !sandboxDisabled(env),
+      ...(proxy === undefined ? {} : { proxy }),
     };
   }
 

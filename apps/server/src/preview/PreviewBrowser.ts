@@ -20,6 +20,7 @@ import * as NodeCrypto from "node:crypto";
 
 import * as ServerConfig from "../config.ts";
 import { openZipArchive } from "../zipArchive.ts";
+import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 
 // Update the version, sizes and hashes from each chrome-headless-shell zip listed at
 // https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json
@@ -123,13 +124,25 @@ export class PreviewBrowserUnsupportedError extends Schema.TaggedError<PreviewBr
   }
 }
 
+export class PreviewBrowserMissingError extends Schema.TaggedError<PreviewBrowserMissingError>()(
+  "PreviewBrowserMissingError",
+  { executable: Schema.String },
+) {
+  override get message(): string {
+    return `T3's headless browser is set to ${this.executable} by ${PreviewBrowserHost.EXECUTABLE_VARIABLE}, which is not an executable file at an absolute path. T3 downloads no browser while it is set.`;
+  }
+}
+
 export class PreviewBrowser extends Context.Service<
   PreviewBrowser,
   {
     /** Starts installation on first call; returns progress after a bounded wait while installation continues. */
     readonly executable: Effect.Effect<
       string,
-      PreviewBrowserInstallError | PreviewBrowserInstallingError | PreviewBrowserUnsupportedError
+      | PreviewBrowserInstallError
+      | PreviewBrowserInstallingError
+      | PreviewBrowserUnsupportedError
+      | PreviewBrowserMissingError
     >;
     readonly installed: Effect.Effect<Option.Option<string>>;
   }
@@ -140,6 +153,11 @@ export interface PreviewBrowserOptions {
   readonly release?: PreviewBrowserRelease | null;
   /** How long a caller waits on an install in progress. Provider tool calls time out near 60s. */
   readonly wait?: Duration.Input;
+  /**
+   * Awake: a browser the host already has, such as one a box's image carries. T3 runs it and
+   * downloads nothing, and a missing one is an error, never a reason to download another.
+   */
+  readonly executable?: string | undefined;
 }
 
 const DOWNLOAD_TIMEOUT = "15 minutes";
@@ -167,6 +185,30 @@ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
   const serviceScope = yield* Effect.scope;
   const platform = yield* HostProcess.Platform;
   const arch = yield* HostProcess.Architecture;
+  if (options.executable !== undefined) {
+    const configured = options.executable;
+    const usable = path.isAbsolute(configured)
+      ? fs.stat(configured).pipe(
+          Effect.map(
+            (info) => info.type === "File" && (platform === "win32" || (info.mode & 0o111) !== 0),
+          ),
+          Effect.orElseSucceed(() => false),
+        )
+      : Effect.succeed(false);
+    return PreviewBrowser.of({
+      executable: usable.pipe(
+        Effect.flatMap((ok) =>
+          ok
+            ? Effect.succeed(configured)
+            : Effect.fail(new PreviewBrowserMissingError({ executable: configured })),
+        ),
+        Effect.withSpan("PreviewBrowser.executable"),
+      ),
+      installed: usable.pipe(
+        Effect.map((ok) => (ok ? Option.some(configured) : Option.none<string>())),
+      ),
+    });
+  }
   const release =
     options.release === undefined ? previewBrowserRelease(platform, arch) : options.release;
   const wait = options.wait ?? "45 seconds";
@@ -442,6 +484,7 @@ export const layer = Layer.effect(
   PreviewBrowser,
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
-    return yield* makePreviewBrowser({ baseDir: config.baseDir });
+    const executable = PreviewBrowserHost.configuredExecutable(yield* HostProcess.Environment);
+    return yield* makePreviewBrowser({ baseDir: config.baseDir, executable });
   }),
 );

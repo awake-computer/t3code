@@ -137,6 +137,7 @@ export class HtmlRender extends Context.Service<
       | PreviewBrowser.PreviewBrowserInstallError
       | PreviewBrowser.PreviewBrowserInstallingError
       | PreviewBrowser.PreviewBrowserUnsupportedError
+      | PreviewBrowser.PreviewBrowserMissingError
       | PreviewBrowserHost.PreviewBrowserHostError
       | HeadlessChrome.HtmlRenderBrowserError
     >;

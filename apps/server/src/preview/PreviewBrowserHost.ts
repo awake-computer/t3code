@@ -12,6 +12,36 @@ export const NO_SANDBOX_SIGNATURE = "No usable sandbox";
 export const sandboxDisabled = (env: Readonly<Record<string, string | undefined>>) =>
   env.T3CODE_SERVER_BROWSER_SANDBOX === "0";
 
+/** Awake: the browser a host's image carries, which T3 runs in place of downloading its own. */
+export const EXECUTABLE_VARIABLE = "T3CODE_SERVER_BROWSER_EXECUTABLE";
+
+export const configuredExecutable = (env: Readonly<Record<string, string | undefined>>) =>
+  env[EXECUTABLE_VARIABLE]?.trim() || undefined;
+
+/** Loopback, which the browser always reaches directly, whatever NO_PROXY says. */
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]", "*.localhost"] as const;
+
+const variable = (env: Readonly<Record<string, string | undefined>>, name: string) =>
+  (env[name] ?? env[name.toLowerCase()])?.trim() || undefined;
+
+/**
+ * Awake: the proxy the server's environment names, for its browser: HTTPS_PROXY, with loopback and
+ * NO_PROXY's hosts around it. Loopback comes first, so a dev server on this machine is reached
+ * directly and Playwright adds no `<-loopback>`. None when no proxy is named, or NO_PROXY is `*`.
+ */
+export const browserProxy = (
+  env: Readonly<Record<string, string | undefined>>,
+): { readonly server: string; readonly bypass: string } | undefined => {
+  const server = variable(env, "HTTPS_PROXY");
+  if (server === undefined) return undefined;
+  const direct = (variable(env, "NO_PROXY") ?? "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter((host) => host.length > 0);
+  if (direct.includes("*")) return undefined;
+  return { server, bypass: [...new Set([...LOOPBACK_HOSTS, ...direct])].join(",") };
+};
+
 /** Set on Ubuntu 23.10+: unprivileged user namespaces need an AppArmor profile. */
 const USERNS_RESTRICTION = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns";
 export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";

@@ -264,6 +264,30 @@ describe("ServerBrowserContexts", () => {
     await pool.close();
   });
 
+  it("launches through the environment's proxy, loopback first, and with none without one", async () => {
+    const browser = makeBrowser();
+    launches.launch.mockResolvedValue(browser as unknown as Browser);
+    const pool = new ServerBrowserContexts({
+      ...options(),
+      env: { HTTPS_PROXY: "http://egress.awake:3128", NO_PROXY: "mint.awake" },
+    });
+    await pool.contextFor(INCOGNITO_BROWSER_PROFILE_ID);
+    expect(launches.launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proxy: {
+          server: "http://egress.awake:3128",
+          bypass: "localhost,127.0.0.1,[::1],*.localhost,mint.awake",
+        },
+      }),
+    );
+    await pool.close();
+    const direct = new ServerBrowserContexts(options());
+    launches.persistent.mockResolvedValue(makeContext() as unknown as BrowserContext);
+    await direct.contextFor("default");
+    expect(launches.persistent.mock.calls[0]?.[1]).not.toHaveProperty("proxy");
+    await direct.close();
+  });
+
   it("retries a failed startup on a later request with sandboxing still enabled", async () => {
     const browser = makeBrowser();
     launches.launch
