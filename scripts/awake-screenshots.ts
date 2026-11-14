@@ -350,7 +350,6 @@ function views(input: {
       // Chat's Browser panel on a dev server's page, as Awake's console opens a terminal's link to
       // the box's own address (FDD-0060 §5.4), beside the thread.
       name: "browser",
-      widths: [1440, 1024],
       last: true,
       open: async (page) => {
         await page.goto(CONSOLE_ORIGIN);
@@ -597,8 +596,8 @@ try {
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
 
-// Seven views at every width, and the Browser panel's at the two wide ones.
-const expected = THEMES.length * (WIDTHS.length * 7 + 2);
+// Eight views at every width, the Browser panel's among them.
+const expected = THEMES.length * WIDTHS.length * 8;
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");
