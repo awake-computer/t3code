@@ -139,7 +139,7 @@ describe("browserProxy", () => {
     ).toBeUndefined();
   });
 
-  it("goes through HTTPS_PROXY with loopback first, then NO_PROXY's hosts", () => {
+  it("goes through HTTPS_PROXY with loopback alone around it, whatever else NO_PROXY lists", () => {
     expect(
       PreviewBrowserHost.browserProxy({
         HTTPS_PROXY: "http://egress.awake:3128",
@@ -147,7 +147,7 @@ describe("browserProxy", () => {
       }),
     ).toEqual({
       server: "http://egress.awake:3128",
-      bypass: "localhost,127.0.0.1,[::1],*.localhost,mint.awake,10.0.16.53",
+      bypass: "localhost,127.0.0.1,[::1],*.localhost",
     });
   });
 

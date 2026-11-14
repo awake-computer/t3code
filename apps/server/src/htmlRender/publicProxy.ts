@@ -86,15 +86,13 @@ const publicAddresses = async (host: string) => {
   return local ? undefined : addresses;
 };
 
-// Awake: a name is local when it's localhost or this machine's resolver answers it with a local
-// address. One it can't resolve, as a box's resolver can't a public name, is the proxy's to resolve.
-const resolvesLocally = async (host: string) => {
+// Awake: a name the proxy is asked for by name is local only when it's localhost or under .localhost.
+// This host's resolver isn't asked: a box's answers no public name, or, with transparent egress,
+// answers each with the proxy's own address, so the proxy resolves the name, and its own lookups drop
+// private answers to public names.
+const isLocalName = (host: string) => {
   const name = host.toLowerCase().replace(/\.$/, "");
-  if (name === "localhost" || name.endsWith(".localhost")) return true;
-  const addresses = await NodeDnsPromises.lookup(name, { all: true, verbatim: true }).catch(
-    () => [],
-  );
-  return addresses.some(({ address, family }) => isLocal(address, family));
+  return name === "localhost" || name.endsWith(".localhost");
 };
 
 /**
@@ -240,54 +238,49 @@ export const publicProxy = Effect.acquireRelease(
         if (through !== undefined && !reachedDirectly(through.direct, request.host, request.port)) {
           const proxy = through.url;
           const family = NodeNet.isIP(request.host);
-          void (
-            family === 0
-              ? resolvesLocally(request.host)
-              : Promise.resolve(isLocal(request.host, family))
-          ).then((local) => {
-            if (client.destroyed) return;
-            client.off("data", holdEarly);
-            if (local) return refuse(client, 2);
-            if (proxy === null) return refuse(client, 1);
-            client.pause();
-            const upstream = track(
-              NodeNet.connect({
-                host: proxy.hostname.replace(/^\[(.*)\]$/, "$1"),
-                port: Number(proxy.port) || 80,
-              }),
-            );
-            const closeClient = () => client.destroy();
-            upstream.once("connect", () =>
-              upstream.write(connectRequest(proxy, request.host, request.port)),
-            );
-            let head = Buffer.alloc(0);
-            const onHead = (chunk: Buffer) => {
-              head = Buffer.concat([head, chunk]);
-              const end = head.indexOf("\r\n\r\n");
-              if (end === -1) {
-                if (head.length > MAX_PROXY_HEAD_BYTES) upstream.destroy();
-                return;
-              }
-              upstream.off("data", onHead);
-              const status = /^HTTP\/1\.[01] (\d{3})/.exec(
-                head.subarray(0, end).toString("latin1"),
-              )?.[1];
-              if (status !== "200") {
-                upstream.off("close", closeClient);
-                upstream.destroy();
-                return refuse(client, status === "403" ? 2 : 4);
-              }
-              client.write(reply(0));
-              const rest = head.subarray(end + 4);
-              if (rest.length > 0) client.write(rest);
-              for (const chunk of early) upstream.write(chunk);
-              upstream.pipe(client);
-              client.pipe(upstream);
-            };
-            upstream.on("data", onHead);
-            upstream.on("close", closeClient);
-            client.on("close", () => upstream.destroy());
-          });
+          client.off("data", holdEarly);
+          if (family === 0 ? isLocalName(request.host) : isLocal(request.host, family)) {
+            return refuse(client, 2);
+          }
+          if (proxy === null) return refuse(client, 1);
+          client.pause();
+          const upstream = track(
+            NodeNet.connect({
+              host: proxy.hostname.replace(/^\[(.*)\]$/, "$1"),
+              port: Number(proxy.port) || 80,
+            }),
+          );
+          const closeClient = () => client.destroy();
+          upstream.once("connect", () =>
+            upstream.write(connectRequest(proxy, request.host, request.port)),
+          );
+          let head = Buffer.alloc(0);
+          const onHead = (chunk: Buffer) => {
+            head = Buffer.concat([head, chunk]);
+            const end = head.indexOf("\r\n\r\n");
+            if (end === -1) {
+              if (head.length > MAX_PROXY_HEAD_BYTES) upstream.destroy();
+              return;
+            }
+            upstream.off("data", onHead);
+            const status = /^HTTP\/1\.[01] (\d{3})/.exec(
+              head.subarray(0, end).toString("latin1"),
+            )?.[1];
+            if (status !== "200") {
+              upstream.off("close", closeClient);
+              upstream.destroy();
+              return refuse(client, status === "403" ? 2 : 4);
+            }
+            client.write(reply(0));
+            const rest = head.subarray(end + 4);
+            if (rest.length > 0) client.write(rest);
+            for (const chunk of early) upstream.write(chunk);
+            upstream.pipe(client);
+            client.pipe(upstream);
+          };
+          upstream.on("data", onHead);
+          upstream.on("close", closeClient);
+          client.on("close", () => upstream.destroy());
           return;
         }
         void publicAddresses(request.host).then((addresses) => {

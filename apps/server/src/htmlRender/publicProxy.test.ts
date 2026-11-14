@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 import * as Effect from "effect/Effect";
+import * as NodeDnsPromises from "node:dns/promises";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 
@@ -25,6 +26,19 @@ vi.mock("node:os", async (importOriginal) => {
         },
       ],
     }),
+  };
+});
+
+// Awake: transparent egress has a box's resolver answer a public name with the proxy's own address.
+const PROXIED_NAME = "proxied.example.test";
+vi.mock("node:dns/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof NodeDnsPromises>();
+  return {
+    ...actual,
+    lookup: ((host: string, options: object) =>
+      host === PROXIED_NAME
+        ? Promise.resolve([{ address: "10.43.0.10", family: 4 }])
+        : actual.lookup(host, options)) as typeof NodeDnsPromises.lookup,
   };
 });
 
@@ -157,6 +171,19 @@ describe("publicProxy through the environment's proxy", () => {
       socket.destroy();
       expect(proxy.requests).toEqual([
         "CONNECT pages.example.invalid:443 HTTP/1.1\r\nHost: pages.example.invalid:443",
+      ]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("tunnels a name the box's resolver answers with the proxy's address, by name", () =>
+    Effect.gen(function* () {
+      const proxy = yield* standInProxy("200 Connection established");
+      const port = yield* throughProxy(proxy.port);
+      const { code, socket } = yield* connectThrough(port, domainTarget(PROXIED_NAME, 443));
+      socket.destroy();
+      expect(code).toBe(0);
+      expect(proxy.requests).toEqual([
+        `CONNECT ${PROXIED_NAME}:443 HTTP/1.1\r\nHost: ${PROXIED_NAME}:443`,
       ]);
     }).pipe(Effect.scoped),
   );

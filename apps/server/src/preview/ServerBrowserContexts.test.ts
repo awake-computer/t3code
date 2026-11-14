@@ -264,7 +264,7 @@ describe("ServerBrowserContexts", () => {
     await pool.close();
   });
 
-  it("launches through the environment's proxy, loopback first, and with none without one", async () => {
+  it("launches through the environment's proxy, loopback alone around it, and with none without one", async () => {
     const browser = makeBrowser();
     launches.launch.mockResolvedValue(browser as unknown as Browser);
     const pool = new ServerBrowserContexts({
@@ -276,7 +276,7 @@ describe("ServerBrowserContexts", () => {
       expect.objectContaining({
         proxy: {
           server: "http://egress.awake:3128",
-          bypass: "localhost,127.0.0.1,[::1],*.localhost,mint.awake",
+          bypass: "localhost,127.0.0.1,[::1],*.localhost",
         },
       }),
     );

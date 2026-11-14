@@ -25,21 +25,18 @@ const variable = (env: Readonly<Record<string, string | undefined>>, name: strin
   (env[name] ?? env[name.toLowerCase()])?.trim() || undefined;
 
 /**
- * Awake: the proxy the server's environment names, for its browser: HTTPS_PROXY, with loopback and
- * NO_PROXY's hosts around it. Loopback comes first, so a dev server on this machine is reached
- * directly and Playwright adds no `<-loopback>`. None when no proxy is named, or NO_PROXY is `*`.
+ * Awake: the browser's proxy, HTTPS_PROXY, bypassed for loopback alone, so a local dev server is
+ * reached directly and Playwright adds no `<-loopback>`; NO_PROXY's other hosts, the host's own
+ * services, go through the proxy too. None when no proxy is named, or NO_PROXY is `*`.
  */
 export const browserProxy = (
   env: Readonly<Record<string, string | undefined>>,
 ): { readonly server: string; readonly bypass: string } | undefined => {
   const server = variable(env, "HTTPS_PROXY");
   if (server === undefined) return undefined;
-  const direct = (variable(env, "NO_PROXY") ?? "")
-    .split(",")
-    .map((host) => host.trim())
-    .filter((host) => host.length > 0);
+  const direct = (variable(env, "NO_PROXY") ?? "").split(",").map((host) => host.trim());
   if (direct.includes("*")) return undefined;
-  return { server, bypass: [...new Set([...LOOPBACK_HOSTS, ...direct])].join(",") };
+  return { server, bypass: LOOPBACK_HOSTS.join(",") };
 };
 
 /** Set on Ubuntu 23.10+: unprivileged user namespaces need an AppArmor profile. */
