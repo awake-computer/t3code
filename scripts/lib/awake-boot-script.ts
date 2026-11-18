@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - a digest names the file; no Effect runtime runs here.
 import * as NodeCrypto from "node:crypto";
 
 /** A page whose inline script has moved to a file of its own, and that file. */
@@ -11,12 +12,9 @@ export interface ExternalizedBootScript {
 const INLINE_SCRIPT = /<script>([\s\S]*?)<\/script>/g;
 
 /**
- * Moves a built page's one inline script into a file of its own, named by its digest.
- *
- * Awake's gateway serves Awake Chat under a content policy that takes scripts from the page's own
- * host, and an inline one only by a hash it holds for a whole cell. Boxes on an older and a newer
- * build run side by side there, each with its own inline script, so no one hash serves both. A
- * page with no inline script needs none, on any build that follows.
+ * Moves a built page's one inline script into a file named by its digest. Awake's gateway takes an
+ * inline script by one hash for a whole cell, where older and newer builds run side by side, so
+ * the page that needs no hash is one with no inline script.
  */
 export function externalizeBootScript(html: string): ExternalizedBootScript {
   const scripts = [...html.matchAll(INLINE_SCRIPT)];
