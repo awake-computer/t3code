@@ -359,6 +359,16 @@ function views(input: {
             ?.evaluate(deepTextCheck(DEV_PAGE_TITLE))
             .then((value) => value === true)
             .catch(() => false) ?? Promise.resolve(false);
+        // Awake's gateway sets the whole content policy over the box's, and with it who may frame
+        // Chat. With no gateway here, the stand-in console takes T3 Code's own refusal off.
+        await page.route(`${origin}/**`, async (route) => {
+          if (route.request().resourceType() !== "document") return route.fallback();
+          const response = await route.fetch();
+          const headers = { ...response.headers() };
+          delete headers["content-security-policy"];
+          delete headers["x-frame-options"];
+          return route.fulfill({ response, headers });
+        });
         // First as a cold Chat takes the link, at its first load; what it shows is logged when
         // the page doesn't come, and the capture goes on as a Chat that has loaded before.
         await page.goto(CONSOLE_ORIGIN);
