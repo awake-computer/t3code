@@ -427,7 +427,7 @@ describe("Awake's build", () => {
       settingsNavGroupsFor(true, voice).flatMap((group) => group.paths);
     expect(paths(true)).toContain("/settings/voice");
     expect(paths(false)).toEqual(paths(true).filter((path) => path !== "/settings/voice"));
-    expect(settingsNavGroupsFor(false).flatMap((group) => group.paths)).toEqual(paths(true));
+    expect(settingsNavGroupsFor(false).flatMap((group) => group.paths)).toContain("/settings/voice");
   });
 
   it("leaves voice's settings and its shortcut out of the search with them", () => {

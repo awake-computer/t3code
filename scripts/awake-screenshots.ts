@@ -596,7 +596,8 @@ try {
           await context.route(`${origin}/**`, async (route) => {
             if (route.request().resourceType() !== "document") return route.fallback();
             const response = await route.fetch();
-            const headers = { ...response.headers(), "permissions-policy": GATEWAY_PERMISSIONS };
+            const headers = { ...response.headers() };
+            headers["permissions-policy"] = GATEWAY_PERMISSIONS;
             delete headers["content-security-policy"];
             delete headers["x-frame-options"];
             return route.fulfill({ response, headers });
