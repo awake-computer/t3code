@@ -557,7 +557,11 @@ try {
     "{",
   );
 
-  const browser = await chromium.launch();
+  // The Browser panel's capture answers Chat's documents itself (below), and Chrome takes a page
+  // answered that way for a public one, whose socket to this machine it would refuse.
+  const browser = await chromium.launch({
+    args: ["--disable-features=LocalNetworkAccessChecks,LocalNetworkAccessChecksWebSockets"],
+  });
   try {
     const pairingContext = await browser.newContext({ viewport: WIDTHS[0] });
     const pairingPage = await pairingContext.newPage();
