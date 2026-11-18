@@ -130,6 +130,16 @@ jobs:
             echo "A typecheck task failed; running what failed again, one task at a time."
             if ! vp run -r --cache --concurrency-limit 1 typecheck; then
               vp run --last-details || true
+              # The checker can exit before all it wrote is out, which leaves its errors behind
+              # its suggestions. Run the server's again on a terminal of its own, into a file,
+              # and print what is not a suggestion.
+              bin="$(find "$PWD/node_modules/.bin" "$PWD/apps/server/node_modules/.bin" -name effect-tsgo -print -quit 2>/dev/null)"
+              out="$RUNNER_TEMP/server-typecheck.txt"
+              (cd apps/server && script -qefc "$bin tsrs --noEmit --pretty false" "$out" >/dev/null 2>&1) || echo "the server's typecheck exited $?"
+              echo "lines: $(wc -l < "$out"); suggestions: $(grep -c 'suggestion TS' "$out"); errors: $(grep -c 'error TS' "$out")"
+              grep -E 'error TS|^Found |panicked|fatal|memory' "$out" | head -200 || true
+              echo "the end of its output:"
+              tail -n 15 "$out" || true
               exit 1
             fi
           fi
