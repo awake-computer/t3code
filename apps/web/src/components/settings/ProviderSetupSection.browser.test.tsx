@@ -115,6 +115,7 @@ interface SectionOptions {
   enabled?: boolean;
   binaryPath?: string;
   notAllowed?: string;
+  awakeBrand?: boolean;
 }
 
 function section(options: SectionOptions = {}) {
@@ -129,6 +130,7 @@ function section(options: SectionOptions = {}) {
       readOnly={options.readOnly ?? false}
       onEnable={vi.fn()}
       notAllowed={options.notAllowed}
+      awakeBrand={options.awakeBrand}
     />
   );
 }
@@ -287,6 +289,7 @@ describe("Antigravity setup", () => {
     await using screen = await renderSetup({
       provider: { ...provider, installed: false },
       binaryPath: "/opt/awake/bin/agy",
+      awakeBrand: true,
     });
     expect(screen.occurrences("Signs in with its own agy")).toBe(1);
     expect(screen.button("Sign in")).toBeNull();

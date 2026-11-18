@@ -26,7 +26,7 @@ concurrency:
 env:
   # The upstream release `awake` is built on. A release tag must name it, and the runtime install's
   # 14-day rule counts from the day it was published.
-  AWAKE_UPSTREAM_VERSION: 0.1.7
+  AWAKE_UPSTREAM_VERSION: 0.1.10
 
 jobs:
   preflight:
@@ -125,7 +125,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: vp run typecheck
 
-  # The same package split and server shards as release.yml's test, test_web and test_server.
+  # The same package split, web shards and server shards as release.yml's test, test_web and
+  # test_server.
   test:
     name: Release tests
     needs: [preflight]
@@ -153,10 +154,14 @@ jobs:
         run: vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
 
   test_web:
-    name: Release web tests
+    name: Release web tests ${{ matrix.shard }}
     needs: [preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -193,10 +198,11 @@ jobs:
           fi
 
       - name: Test
-        run: vp run --filter @t3tools/web test
+        run: vp run --filter @t3tools/web test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
       # Browser tests run source modules; this boots the production chunk graph.
       - name: Boot the built web client
+        if: matrix.shard == 1
         run: |
           vp run --filter @t3tools/web build
           node apps/web/scripts/verify-built-boot.ts

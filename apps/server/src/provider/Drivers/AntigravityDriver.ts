@@ -4,6 +4,7 @@ import {
   isAntigravityCliPath,
   ProviderDriverKind,
   ProviderSetupError,
+  settingsSecretLiteral,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
@@ -23,7 +24,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { HttpClient } from "effect/http";
-import type { AcpError } from "effect-acp/errors";
+import * as AcpErrors from "effect-acp/errors";
 
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import {
@@ -46,6 +47,7 @@ import {
   type AntigravityAuthConfig,
 } from "../antigravityAuthSupport.ts";
 import {
+  antigravityCliSessionMode,
   antigravityModelOptions,
   antigravityThinkingConfig,
   makeAntigravityAcpRuntime,
@@ -78,6 +80,21 @@ import { discoverAntigravitySkills, resolveAntigravityUserHome } from "./Antigra
 const DRIVER = ProviderDriverKind.make("antigravity");
 const decodeSettings = Schema.decodeSync(AntigravitySettings);
 const isNodeRuntimeUnavailableError = Schema.is(NodeRuntimeUnavailableError);
+const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
+const isAcpErrorDetails = Schema.is(Schema.Struct({ details: Schema.String }));
+const REFRESH_FAILED =
+  "Could not refresh Antigravity models. The previous model list is unchanged.";
+const PYTHON_SOCKS_REQUIRED = "python-socks is required to use a SOCKS proxy";
+
+// Keep upstream diagnostics in cause; only recognized, fixed text reaches clients.
+function refreshFailureDetail(cause: unknown) {
+  return isAcpRequestError(cause) &&
+    cause.operation === "receive-response" &&
+    isAcpErrorDetails(cause.data) &&
+    cause.data.details.includes(PYTHON_SOCKS_REQUIRED)
+    ? `${REFRESH_FAILED} Antigravity reported: ${PYTHON_SOCKS_REQUIRED}`
+    : REFRESH_FAILED;
+}
 
 export type AntigravityDriverEnv =
   | AntigravityInstallation.AntigravityInstallation
@@ -126,12 +143,14 @@ export const AntigravityDriver: ProviderDriver<
     const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
     const makeNativeLogger = yield* makeAcpNativeLoggerFactory();
     const settings = { ...config, enabled } satisfies AntigravitySettings;
-    // The Antigravity CLI at the binary path runs as `agy acp`, on the CLI's own sign-in, so this
-    // instance's sign-in settings don't apply to it, and T3 Code signs in for it in no way.
-    const cliRuntime = isAntigravityCliPath(settings.binaryPath);
+    // Awake's build runs the Antigravity CLI at the binary path as `agy acp` on the CLI's own
+    // sign-in, in the user's own `~/.gemini`: this instance's sign-in settings don't apply to it,
+    // and T3 Code signs in for it in no way. Any other build keeps the CLI on its private profile.
+    const cliRuntime = awakeBuild && isAntigravityCliPath(settings.binaryPath);
     const auth: AntigravityAuthConfig = {
       authMethod: settings.authMethod,
-      apiKey: settings.apiKey,
+      // The instance registry has already read a referenced key from its secret provider.
+      apiKey: settingsSecretLiteral(settings.apiKey),
       gcpProject: settings.gcpProject,
       gcpLocation: settings.gcpLocation,
     };
@@ -189,7 +208,7 @@ export const AntigravityDriver: ProviderDriver<
       input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
     ): Effect.fn.Return<
       AcpSessionRuntime.AcpSessionRuntime["Service"],
-      AcpError | ProviderSetupError,
+      AcpErrors.AcpError | ProviderSetupError,
       Scope.Scope
     > {
       if (authConfigIssue !== null) {
@@ -210,7 +229,7 @@ export const AntigravityDriver: ProviderDriver<
             }),
         ),
       );
-      if (executable.runtime === "cli") {
+      if (cliRuntime && executable.harnessPath === null) {
         const { onAuthorizationUrl: _signIn, ...cliInput } = input;
         const runtime = yield* makeAntigravityAcpRuntime({
           ...cliInput,
@@ -221,11 +240,12 @@ export const AntigravityDriver: ProviderDriver<
             executablePath: executable.executablePath,
             cwd: input.cwd,
             baseEnv: processEnvironment,
-            disableTelemetry: awakeBuild,
+            disableTelemetry: true,
           }),
         }).pipe(Effect.provideService(SecureRandom.SecureRandom, random));
         return {
           ...runtime,
+          setMode: (modeId: string) => runtime.setMode(antigravityCliSessionMode(modeId)),
           start: () =>
             runtime
               .start()
@@ -297,6 +317,9 @@ export const AntigravityDriver: ProviderDriver<
       }).pipe(Effect.provideService(SecureRandom.SecureRandom, random));
       return {
         ...runtime,
+        ...(executable.harnessPath === null
+          ? { setMode: (modeId: string) => runtime.setMode(antigravityCliSessionMode(modeId)) }
+          : {}),
         start: () =>
           runtime
             .start()
@@ -445,6 +468,7 @@ export const AntigravityDriver: ProviderDriver<
       Effect.provideService(HttpClient.HttpClient, httpClient),
     );
     const provider = yield* makeAntigravityProvider(settings, {
+      environment: processEnvironment,
       stampIdentity: classifyModels,
       probe,
       probeUsage: usage.probe,
@@ -472,11 +496,15 @@ export const AntigravityDriver: ProviderDriver<
     const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
     const orchestrationAdapter = yield* makeAntigravityAdapterV2({
       instanceId,
-      cliRuntime,
       selfInvocation,
       makeRuntime,
       withProcess: authFlow.withProcess,
       defaultModel,
+      supportsNativeGoals: provider.snapshot.getSnapshot.pipe(
+        Effect.map(
+          (snapshot) => snapshot.slashCommands?.some((command) => command.name === "goal") === true,
+        ),
+      ),
       profileDirectory,
       onSessionStarted: provider.onSessionStarted,
       onSessionEvent: (event) => {
@@ -547,7 +575,7 @@ export const AntigravityDriver: ProviderDriver<
                 : cause._tag === "ProviderSetupError" &&
                     (cause.operation === "configure" || cause.operation === "start")
                   ? cause.detail
-                  : "Could not refresh Antigravity models. The previous model list is unchanged.",
+                  : refreshFailureDetail(cause),
               cause,
             }),
       ),

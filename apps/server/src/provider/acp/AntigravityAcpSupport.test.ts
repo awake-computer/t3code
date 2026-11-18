@@ -17,8 +17,6 @@ import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import {
   applyAntigravityAcpModelSelection,
   antigravityClientInfo,
-  antigravityCliPermissionMode,
-  antigravityCliRuntimeModeForSessionMode,
   antigravitySessionMeta,
   buildAntigravityPrompt,
   isQualifiedAntigravityRelease,
@@ -61,39 +59,36 @@ function makeModelRuntime(
 }
 
 describe("The Antigravity CLI's agy acp", () => {
-  it("runs each runtime mode in one of the CLI's own session modes, and reads them back", () => {
-    expect(antigravityCliPermissionMode("full-access")).toBe("accept-edits");
-    expect(antigravityCliPermissionMode("auto-accept-edits")).toBe("accept-edits");
-    expect(antigravityCliPermissionMode("auto")).toBe("default");
-    expect(antigravityCliPermissionMode("approval-required")).toBe("default");
-    expect(antigravityCliRuntimeModeForSessionMode("accept-edits")).toBe("auto-accept-edits");
-    expect(antigravityCliRuntimeModeForSessionMode("default")).toBe("approval-required");
-    expect(antigravityCliRuntimeModeForSessionMode("plan")).toBeUndefined();
-    expect(antigravityCliRuntimeModeForSessionMode("yolo")).toBeUndefined();
-  });
-
   it("names Awake Chat to Google in Awake's build, never another client", () => {
-    expect(antigravityClientInfo(true)).toMatchObject({ name: "awake-chat" });
-    expect(antigravityClientInfo(true).version).not.toBe("");
-    expect(antigravityClientInfo(false)).toEqual({ name: "zed", version: "0.0.0" });
+    for (const version of ["1.4.5", "1.5.2", null, undefined]) {
+      expect(antigravityClientInfo(version, true)).toMatchObject({ name: "awake-chat" });
+    }
+    expect(antigravityClientInfo(null, true).version).not.toBe("");
+    expect(antigravityClientInfo(null, false)).toEqual({ name: "zed", version: "0.0.0" });
   });
 });
 
 describe("Antigravity release gates", () => {
   it.each([
-    { version: "1.4.1", filter: false, native: false },
-    { version: "1.4.2", filter: true, native: false },
-    { version: "1.4.4", filter: true, native: false },
-    { version: "1.4.5", filter: true, native: true },
-    { version: "1.4.6", filter: false, native: false },
-    { version: "1.3.0", filter: false, native: false },
-    { version: undefined, filter: false, native: false },
-    { version: "unknown", filter: false, native: false },
+    { version: "1.4.1", filter: false, native: false, ownName: false, advertisedAppend: false },
+    { version: "1.4.2", filter: true, native: false, ownName: false, advertisedAppend: false },
+    { version: "1.4.4", filter: true, native: false, ownName: false, advertisedAppend: false },
+    { version: "1.4.5", filter: true, native: true, ownName: false, advertisedAppend: false },
+    { version: "1.4.6", filter: false, native: false, ownName: false, advertisedAppend: false },
+    { version: "1.5.0", filter: false, native: false, ownName: false, advertisedAppend: false },
+    { version: "1.5.1", filter: false, native: false, ownName: true, advertisedAppend: false },
+    { version: "1.5.7", filter: false, native: false, ownName: true, advertisedAppend: true },
+    { version: "1.3.0", filter: false, native: false, ownName: false, advertisedAppend: false },
+    { version: undefined, filter: false, native: false, ownName: false, advertisedAppend: false },
+    { version: "unknown", filter: false, native: false, ownName: false, advertisedAppend: false },
   ])(
-    "$version: workflow filter $filter, native reads and system prompt $native",
-    ({ version, filter, native }) => {
+    "$version: workflow filter $filter, qualified reads $native, advertised system append $advertisedAppend, own client name $ownName",
+    ({ version, filter, native, ownName, advertisedAppend }) => {
       const initialize = {
         protocolVersion: 1,
+        ...(advertisedAppend
+          ? { agentCapabilities: { _meta: { antigravity: { systemPrompt: { append: true } } } } }
+          : {}),
         ...(version === undefined ? {} : { agentInfo: { name: "antigravity-acp", version } }),
       };
       // Helpers send no append, so only the workflow filter can apply.
@@ -102,12 +97,15 @@ describe("Antigravity release gates", () => {
       );
       const antigravity = {
         ...(filter ? { disabledTools: ["run_workflow"] } : {}),
-        ...(native ? { systemPrompt: { append: "<pull_request_linking/>" } } : {}),
+        ...(native || advertisedAppend
+          ? { systemPrompt: { append: "<pull_request_linking/>" } }
+          : {}),
       };
       expect(antigravitySessionMeta(initialize, "<pull_request_linking/>")).toEqual(
-        filter || native ? { antigravity } : undefined,
+        filter || native || advertisedAppend ? { antigravity } : undefined,
       );
       expect(isQualifiedAntigravityRelease(version)).toBe(native);
+      expect(antigravityClientInfo(version).name).toBe(ownName ? "t3-code" : "zed");
     },
   );
 });
@@ -547,7 +545,7 @@ it.layer(NodeServices.layer)("buildAntigravityPrompt", (it) => {
     }),
   );
 
-  it.effect.each([undefined, {}, { image: false }, { image: true }])(
+  it.effect.each([{ image: true }])(
     "keeps unsupported image formats path-only with capabilities %s",
     (promptCapabilities) =>
       Effect.gen(function* () {

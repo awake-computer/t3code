@@ -35,14 +35,22 @@ describe("ProviderSettingsForm helpers", () => {
     ]);
   });
 
-  it("leaves out an Antigravity instance's sign-in fields when it runs the Antigravity CLI", () => {
+  it("leaves out Antigravity's sign-in fields when Awake's build runs its CLI", () => {
     const definition = {
       driverKind: ProviderDriverKind.make("antigravity"),
       settingsSchema: AntigravitySettings,
     };
-    const keys = (value: unknown) =>
-      deriveProviderSettingsFields(definition, value).map(({ key }) => key);
+    const keys = (value: unknown, awakeBrand = true) =>
+      deriveProviderSettingsFields(definition, value, awakeBrand).map(({ key }) => key);
     expect(keys({ binaryPath: "/opt/awake/bin/agy" })).toEqual(["binaryPath"]);
+    // Any other build keeps the CLI on T3 Code's own sign-in, so its fields stay.
+    expect(keys({ binaryPath: "/opt/awake/bin/agy" }, false)).toEqual([
+      "authMethod",
+      "apiKey",
+      "gcpProject",
+      "gcpLocation",
+      "binaryPath",
+    ]);
     expect(keys({ binaryPath: "/release/agy_acp_server.par" })).toEqual([
       "authMethod",
       "apiKey",
@@ -69,6 +77,24 @@ describe("ProviderSettingsForm helpers", () => {
     );
 
     expect(next).toEqual({ forkOwned: 1 });
+  });
+
+  it("does not store a text value its field's schema rejects", () => {
+    const claude = providerClients.get(ProviderDriverKind.make("claudeAgent"));
+    expect(claude).toBeDefined();
+    const autoCompactWindow = deriveProviderSettingsFields(claude!).find(
+      (field) => field.key === "autoCompactWindow",
+    );
+    expect(autoCompactWindow).toBeDefined();
+
+    for (const invalid of ["300k", "50000"]) {
+      expect(
+        nextProviderConfigWithFieldValue({ launchArgs: "--x" }, autoCompactWindow!, invalid),
+      ).toEqual({ launchArgs: "--x" });
+    }
+    expect(
+      nextProviderConfigWithFieldValue({ launchArgs: "--x" }, autoCompactWindow!, "300000"),
+    ).toEqual({ launchArgs: "--x", autoCompactWindow: "300000" });
   });
 
   it("stores false boolean fields when true is the default", () => {

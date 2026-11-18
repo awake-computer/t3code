@@ -15,6 +15,7 @@ import {
 import { useRef, useState } from "react";
 import { Trash2Icon } from "lucide-react";
 
+import { IS_AWAKE_BRAND } from "../../branding";
 import { ensureLocalApi } from "../../localApi";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -36,6 +37,8 @@ interface ProviderSetupSectionProps {
   readonly onEnable: () => void;
   /** Set when the policy forbids the provider: nothing here can run it, so nothing offers to. */
   readonly notAllowed?: string | undefined;
+  /** Awake's build, where the Antigravity CLI keeps its own sign-in. The build's own by default. */
+  readonly awakeBrand?: boolean | undefined;
 }
 
 export function readAntigravityAuthMethod(config: unknown): AntigravityAuthMethod {
@@ -73,8 +76,8 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
       />
       {props.notAllowed !== undefined ? (
         <SettingsRow title={props.notAllowed} />
-      ) : isAntigravityCliPath(props.binaryPath) ? (
-        // The CLI's `agy acp` keeps its own sign-in and needs no runtime of T3 Code's.
+      ) : (props.awakeBrand ?? IS_AWAKE_BRAND) && isAntigravityCliPath(props.binaryPath) ? (
+        // In Awake's build the CLI's `agy acp` keeps its own sign-in, with no runtime of T3 Code's.
         <SettingsRow
           title="Antigravity CLI"
           description="Signs in with its own agy, run in a terminal, by any method it offers."

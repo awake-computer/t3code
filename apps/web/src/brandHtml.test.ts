@@ -18,8 +18,16 @@ describe("brandIndexHtml", () => {
     expect(branded).not.toContain("#ffffff");
   });
 
+  it("leaves the page one inline script, the one whose hash Awake's gateway allows", async () => {
+    const html = await NodeFSP.readFile(new URL("../index.html", import.meta.url), "utf8");
+    expect(html.split("<script>").length - 1).toBe(2);
+    const branded = brandIndexHtml(html);
+    expect(branded.split("<script>").length - 1).toBe(1);
+    expect(branded).not.toContain("desktopBridge?.getAppBranding");
+  });
+
   it("refuses a page it cannot brand whole", () => {
-    expect(() => brandIndexHtml("<title>T3 Code (Beta)</title>")).toThrow(/index.html should hold/);
+    expect(() => brandIndexHtml("<title>T3 Code</title>")).toThrow(/index.html should hold/);
   });
 });
 

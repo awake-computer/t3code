@@ -12,19 +12,20 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/compat";
 
-import packageJson from "../../../package.json" with { type: "json" };
 import { awakeBuild } from "../../config.ts";
 import {
   makeAntigravityStderrHandler,
   makeAntigravityStdoutTransform,
 } from "../antigravityAuthSupport.ts";
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import packageJson from "../../../package.json" with { type: "json" };
 import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
 
 export interface AntigravityAcpRuntimeInput extends Omit<
@@ -44,7 +45,8 @@ export interface AntigravityAcpRuntimeInput extends Omit<
   readonly onAuthorizationUrl?: (url: string) => Effect.Effect<void, EffectAcpErrors.AcpError>;
   /** Serve `fs/read_text_file` for runtimes whose native reader is not qualified. */
   readonly clientFileReads?: boolean;
-  /** The installed version, known before `initialize`; it picks the file reader. */
+  readonly clientCapabilities?: AcpSessionRuntime.AcpSessionRuntimeOptions["clientCapabilities"];
+  /** The installed version, known before `initialize`; it picks the file reader and client name. */
   readonly runtimeVersion?: string | null;
   /** Conversational sessions only; helpers and probes leave the system prompt untouched. */
   readonly sessionSystemPromptAppend?: string;
@@ -90,13 +92,24 @@ export function isQualifiedAntigravityRelease(version: string | null | undefined
   return version?.trim() === "1.4.5";
 }
 
+// `agy acp` 1.5.1 offers every model to every ACP client; older runtimes allowlist editors.
+const OPEN_MODEL_ACCESS_RELEASE = [1, 5, 1] as const;
+
 /**
  * 1.4.5 appends `systemPrompt.append` to its system instructions on new, load and resume, and
  * keeps none of it between processes, so every activation sends it again.
  */
 export const antigravityAppendsSystemPrompt = (
   initializeResult: EffectAcpSchema.InitializeResponse,
-) => isQualifiedAntigravityRelease(initializeResult.agentInfo?.version);
+) => {
+  if (isQualifiedAntigravityRelease(initializeResult.agentInfo?.version)) return true;
+  const extension = initializeResult.agentCapabilities?._meta?.antigravity;
+  return (
+    Predicate.isObject(extension) &&
+    Predicate.isObject(extension.systemPrompt) &&
+    extension.systemPrompt.append === true
+  );
+};
 
 export function antigravitySessionMeta(
   initializeResult: EffectAcpSchema.InitializeResponse,
@@ -114,13 +127,15 @@ export function antigravitySessionMeta(
 }
 
 /**
- * The client T3 Code says it is. The standalone server offered models other than Gemini only to
- * editors it lists, such as Zed; Awake's build names itself in every case, since it must never say
- * it is another client.
+ * The client T3 Code says it is. Older releases offer non-Gemini models only to allowlisted
+ * clients such as Zed. Awake's build names itself in every case, since it must never say it is
+ * another client.
  */
-export function antigravityClientInfo(awake = awakeBuild) {
-  return awake
-    ? { name: "awake-chat", version: packageJson.version }
+export function antigravityClientInfo(version: string | null | undefined, awake = awakeBuild) {
+  if (awake) return { name: "awake-chat", version: packageJson.version };
+  const parsed = parseAntigravityVersion(version);
+  return parsed !== undefined && compareVersions(parsed, OPEN_MODEL_ACCESS_RELEASE) >= 0
+    ? { name: "t3-code", title: "T3 Code", version: packageJson.version }
     : { name: "zed", version: "0.0.0" };
 }
 
@@ -139,10 +154,11 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
       ...(input.cliRuntime === true ? { authenticateOnAuthRequired: false } : {}),
       resumeMethod: "resume",
       cancelBehavior: "wait-for-prompt",
-      clientInfo: antigravityClientInfo(),
+      clientInfo: antigravityClientInfo(input.runtimeVersion),
       sessionMeta: (initializeResult) =>
         antigravitySessionMeta(initializeResult, input.sessionSystemPromptAppend),
       clientCapabilities: {
+        ...input.clientCapabilities,
         // Advertising writes swaps the agent's diff edits for whole-file client_edit_file.
         fs: {
           readTextFile:
@@ -180,30 +196,12 @@ export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
 }
 
 /**
- * The Antigravity CLI's session mode for a runtime mode. `agy acp` has `default`, `accept-edits`
- * and `plan`, and no mode that approves everything: under Full access T3 Code approves its asks.
+ * The agy CLI rejects the managed runtime's `yolo` and `auto_edit`. It stays in `default`, where
+ * it asks before acting and T3 answers from the live runtime policy, so permission changes apply
+ * on the next turn without a restart.
  */
-export function antigravityCliPermissionMode(runtimeMode: RuntimeMode): string {
-  switch (runtimeMode) {
-    case "full-access":
-    case "auto-accept-edits":
-      return "accept-edits";
-    case "auto":
-    case "approval-required":
-      return "default";
-  }
-}
-
-/** The runtime mode a CLI session mode grants; the inverse of `antigravityCliPermissionMode`. */
-export function antigravityCliRuntimeModeForSessionMode(modeId: string): RuntimeMode | undefined {
-  switch (modeId) {
-    case "accept-edits":
-      return "auto-accept-edits";
-    case "default":
-      return "approval-required";
-    default:
-      return undefined;
-  }
+export function antigravityCliSessionMode(modeId: string): string {
+  return modeId === "yolo" || modeId === "auto_edit" ? "default" : modeId;
 }
 
 /** The runtime mode an Antigravity session mode grants; the inverse of `antigravityPermissionMode`. */

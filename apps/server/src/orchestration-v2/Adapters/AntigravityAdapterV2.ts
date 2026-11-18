@@ -21,8 +21,6 @@ import type { AntigravityAuth } from "../../provider/AntigravityAuth.ts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import {
   antigravityAppendsSystemPrompt,
-  antigravityCliPermissionMode,
-  antigravityCliRuntimeModeForSessionMode,
   antigravityPermissionMode,
   antigravityRuntimeModeForSessionMode,
   applyAntigravityAcpModelSelection,
@@ -74,8 +72,6 @@ const AntigravityProviderCapabilitiesV2 = {
 
 export interface AntigravityAdapterV2Options {
   readonly instanceId: ProviderInstanceId;
-  /** The Antigravity CLI's `agy acp`, whose session modes are its own. */
-  readonly cliRuntime?: boolean;
   readonly selfInvocation: SelfInvocation;
   readonly makeRuntime: (
     input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
@@ -86,6 +82,7 @@ export interface AntigravityAdapterV2Options {
   >;
   readonly withProcess: AntigravityAuth["withProcess"];
   readonly defaultModel: Effect.Effect<string | undefined>;
+  readonly supportsNativeGoals?: Effect.Effect<boolean>;
   readonly onSessionStarted?: (
     started: AcpSessionRuntime.AcpSessionRuntimeStartResult,
     cwd: string,
@@ -212,11 +209,12 @@ export function makeAntigravityAcpAdapterFlavor(
     driver: ANTIGRAVITY_PROVIDER,
     runtimeHarness: "Antigravity",
     capabilities: AntigravityProviderCapabilitiesV2,
+    supportsNativeGoals: options.supportsNativeGoals ?? Effect.succeed(false),
     // Agents that advertise HTTP MCP skip the stdio bridge process; others keep stdio.
     mcpOverHttp: true,
     sessionCarriesPullRequestLinking: antigravityAppendsSystemPrompt,
     makeRuntime,
-    buildPrompt: ({
+    buildAttachmentPrompt: ({
       text,
       attachments,
       resolveAttachmentPath,
@@ -232,6 +230,7 @@ export function makeAntigravityAcpAdapterFlavor(
         agentVersion,
         currentModel,
       }).pipe(
+        Effect.map((blocks) => (text.trim() ? blocks.slice(1) : blocks)),
         Effect.provideService(FileSystem.FileSystem, options.fileSystem),
         Effect.provideService(Path.Path, options.path),
       ),
@@ -251,14 +250,8 @@ export function makeAntigravityAcpAdapterFlavor(
         mapError: (cause) => cause,
       });
     }),
-    sessionModeForPolicy: (policy) =>
-      options.cliRuntime === true
-        ? antigravityCliPermissionMode(policy.runtimeMode)
-        : antigravityPermissionMode(policy.runtimeMode),
-    runtimeModeForSessionMode:
-      options.cliRuntime === true
-        ? antigravityCliRuntimeModeForSessionMode
-        : antigravityRuntimeModeForSessionMode,
+    sessionModeForPolicy: (policy) => antigravityPermissionMode(policy.runtimeMode),
+    runtimeModeForSessionMode: antigravityRuntimeModeForSessionMode,
     clientFileSystem: {
       readTextFile: (request, cwd) =>
         readAntigravityClientTextFile({
@@ -283,6 +276,8 @@ export function makeAntigravityAcpAdapterFlavor(
     // ACP 1.3.0 treats /compact as ordinary model input.
     supportsCompaction: false,
     requiresSignIn: isAntigravitySignInRequiredError,
+    // Antigravity can leave a prompt open without updates; long tools and approvals pause this.
+    promptInactivityTimeout: "15 minutes",
     // 1.4.5 returns the root trajectory's Gemini usageMetadata delta; 1.4.1 returns none.
     reportsPerTurnPromptUsage: true,
     geminiPromptUsage: true,

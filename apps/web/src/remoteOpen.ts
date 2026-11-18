@@ -12,10 +12,12 @@ import { Atom } from "effect/reactivity";
 import { useAtomValue } from "@effect/atom-react";
 
 import { IS_AWAKE_BRAND } from "~/branding";
+import { browserClientOs, type BrowserIdentity } from "~/connection/clientMetadata";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isLoopbackHostname } from "~/environments/primary/target";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { environmentPresentations } from "~/state/presentation";
+import { hostEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
 export interface RemoteOpenHost {
   readonly kind: "ssh-alias" | RemoteOpenTarget["kind"];
@@ -72,6 +74,7 @@ export function resolveRemoteOpenState(input: {
   readonly remoteOpenTargets: ReadonlyArray<RemoteOpenTarget> | undefined;
   readonly isDesktopRenderer: boolean;
   readonly managedEditor?: ManagedEditorPolicy | undefined;
+  readonly hostEnvironmentId: string | null;
 }): RemoteOpenState {
   const { target } = input;
   // The administrator's page replaces every editor, on this machine or another.
@@ -86,7 +89,7 @@ export function resolveRemoteOpenState(input: {
       ...(label === undefined ? {} : { label }),
     };
   }
-  if (target === null) {
+  if (target === null || target.environmentId === input.hostEnvironmentId) {
     return LOCAL_EXEC;
   }
   if (target._tag === "PrimaryConnectionTarget") {
@@ -160,6 +163,7 @@ const remoteOpenResolutionAtom = Atom.family((environmentId: EnvironmentId) =>
         remoteOpenTargets: presentation?.serverConfig?.remoteOpenTargets,
         isDesktopRenderer: window.desktopBridge !== undefined,
         managedEditor: presentation?.serverConfig?.managedPolicy?.limits?.editor,
+        hostEnvironmentId: get(hostEnvironmentIdAtom),
       }),
       isResolved: true,
     };
@@ -194,6 +198,12 @@ export function offersEditorLaunchers(state: RemoteOpenState, awake = IS_AWAKE_B
 
 const REMOTE_FALLBACK_EDITORS: ReadonlyArray<EditorId> = ["vscode"];
 
+// Phone and tablet browsers have no desktop editor to receive a vscode:// remote link.
+export function remoteFallbackEditors(identity: BrowserIdentity): ReadonlyArray<EditorId> {
+  const os = browserClientOs(identity);
+  return os === "iOS" || os === "Android" ? [] : REMOTE_FALLBACK_EDITORS;
+}
+
 // Probed once per page: installed editors rarely change, and the probe spawns processes.
 const remoteCapableEditorsAtom = Atom.make((get): ReadonlyArray<EditorId> => {
   const probe = window.desktopBridge?.probeRemoteEditors;
@@ -204,7 +214,7 @@ const remoteCapableEditorsAtom = Atom.make((get): ReadonlyArray<EditorId> => {
     },
     () => undefined,
   );
-  return REMOTE_FALLBACK_EDITORS;
+  return remoteFallbackEditors(navigator);
 }).pipe(Atom.keepAlive, Atom.withLabel("remote-capable-editors"));
 
 export function useRemoteCapableEditors(): ReadonlyArray<EditorId> {

@@ -17,6 +17,19 @@ export function resolveAppBrand(value: string | undefined): AppBrand | undefined
 const AWAKE_LIGHT = "#f5f4f2";
 const AWAKE_DARK = "#262626";
 
+// The script that titles the desktop app's window from its preload. Awake's build has no desktop
+// app, and leaves the script out, so the page keeps one inline script: the gateway that serves
+// Awake Chat allows one, by its hash.
+const DESKTOP_TITLE_SCRIPT = [
+  "    <script>",
+  "      // Desktop's preload injects branding before page scripts. Titling before the <title> below",
+  "      // parses keeps Electron from reporting the web build's channel to the window first.",
+  "      const desktopDisplayName = window.desktopBridge?.getAppBranding?.()?.displayName;",
+  "      if (desktopDisplayName) document.title = desktopDisplayName;",
+  "    </script>",
+  "",
+].join("\n");
+
 function awakeReplacements(): ReadonlyArray<readonly [string, string]> {
   const mark = NodeFS.readFileSync(
     new URL("../../../assets/awake/awake-mark.svg", import.meta.url),
@@ -24,7 +37,8 @@ function awakeReplacements(): ReadonlyArray<readonly [string, string]> {
   ).trim();
   const markUrl = `data:image/svg+xml,${encodeURIComponent(mark)}`;
   return [
-    ["<title>T3 Code (Beta)</title>", "<title>Awake Chat</title>"],
+    ["<title>T3 Code</title>", "<title>Awake Chat</title>"],
+    [DESKTOP_TITLE_SCRIPT, ""],
     ['aria-label="T3 Code splash screen"', 'aria-label="Awake Chat splash screen"'],
     ['src="/apple-touch-icon.png" alt="T3 Code"', `src="${markUrl}" alt="Awake Chat"`],
     [
@@ -51,6 +65,11 @@ export function brandIndexHtml(html: string): string {
       throw new Error(`brand-html: index.html should hold ${JSON.stringify(from)} once.`);
     }
     branded = branded.replace(from, () => to);
+  }
+  // One inline script, and no other: a second would need a second hash in the gateway's policy.
+  const inlineScripts = branded.split("<script>").length - 1;
+  if (inlineScripts !== 1) {
+    throw new Error(`brand-html: index.html should hold one inline script, not ${inlineScripts}.`);
   }
   return branded;
 }
