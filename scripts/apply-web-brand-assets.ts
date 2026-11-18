@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Argument, Command, Flag } from "effect/cli";
+import { externalizeBootScript } from "./lib/awake-boot-script.ts";
 import {
   resolveWebAssetBrandForChannel,
   resolveWebIconOverrides,
@@ -28,13 +29,25 @@ export const applyWebBrandAssets = Effect.fn("applyWebBrandAssets")(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
+  const target = path.resolve(repoRoot, targetDirectory);
 
   yield* Effect.forEach(
-    resolveWebIconOverrides(brand, path.resolve(repoRoot, targetDirectory)),
+    resolveWebIconOverrides(brand, target),
     (override) =>
       fs.copyFile(path.join(repoRoot, override.sourceRelativePath), override.targetRelativePath),
     { concurrency: "unbounded" },
   );
+  if (brand !== "awake") return;
+
+  // Awake's page loads its boot script from a file, so the gateway that serves it needs no hash
+  // for an inline one (scripts/lib/awake-boot-script.ts).
+  const indexPath = path.join(target, "index.html");
+  const page = externalizeBootScript(yield* fs.readFileString(indexPath));
+  if (page.fileName === undefined) return;
+  const scriptPath = path.join(target, page.fileName);
+  yield* fs.makeDirectory(path.dirname(scriptPath), { recursive: true });
+  yield* fs.writeFileString(scriptPath, page.source);
+  yield* fs.writeFileString(indexPath, page.html);
 });
 
 export const applyWebBrandAssetsCommand = Command.make(

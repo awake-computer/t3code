@@ -18,8 +18,9 @@ const AWAKE_LIGHT = "#f5f4f2";
 const AWAKE_DARK = "#262626";
 
 // The script that titles the desktop app's window from its preload. Awake's build has no desktop
-// app, and leaves the script out, so the page keeps one inline script: the gateway that serves
-// Awake Chat allows one, by its hash.
+// app, and leaves the script out, so the page keeps one inline script: the one the release's
+// branding step moves into a file (scripts/lib/awake-boot-script.ts), since the gateway that
+// serves Awake Chat takes scripts from the page's own host.
 const DESKTOP_TITLE_SCRIPT = [
   "    <script>",
   "      // Desktop's preload injects branding before page scripts. Titling before the <title> below",
@@ -66,7 +67,7 @@ export function brandIndexHtml(html: string): string {
     }
     branded = branded.replace(from, () => to);
   }
-  // One inline script, and no other: a second would need a second hash in the gateway's policy.
+  // One inline script, and no other: the branding step has one file to move it into.
   const inlineScripts = branded.split("<script>").length - 1;
   if (inlineScripts !== 1) {
     throw new Error(`brand-html: index.html should hold one inline script, not ${inlineScripts}.`);

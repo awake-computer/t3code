@@ -18,7 +18,7 @@ describe("brandIndexHtml", () => {
     expect(branded).not.toContain("#ffffff");
   });
 
-  it("leaves the page one inline script, the one whose hash Awake's gateway allows", async () => {
+  it("leaves the page one inline script, which the release moves into a file", async () => {
     const html = await NodeFSP.readFile(new URL("../index.html", import.meta.url), "utf8");
     expect(html.split("<script>").length - 1).toBe(2);
     const branded = brandIndexHtml(html);

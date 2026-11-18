@@ -120,10 +120,19 @@ jobs:
             exit 1
           fi
 
-      # Runs even when the check fails, so one run reports both.
+      # Runs even when the check fails, so one run reports both. A task that fails beside three
+      # others runs again alone, the passed ones from the cache, so its own output can be told
+      # apart, and a task that only ran out of the runner's memory passes there.
       - name: Typecheck
         if: ${{ !cancelled() }}
-        run: vp run typecheck
+        run: |
+          if ! vp run typecheck; then
+            echo "A typecheck task failed; running what failed again, one task at a time."
+            if ! vp run -r --cache --concurrency-limit 1 typecheck; then
+              vp run --last-details || true
+              exit 1
+            fi
+          fi
 
   # The same package split, web shards and server shards as release.yml's test, test_web and
   # test_server.

@@ -32,6 +32,37 @@ it.layer(NodeServices.layer)("apply-web-brand-assets", (it) => {
     }),
   );
 
+  it.effect("moves the boot script of Awake's page into a file the page loads", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const targetDirectory = yield* fs.makeTempDirectoryScoped({
+        prefix: "apply-web-brand-assets-",
+      });
+      const indexPath = path.join(targetDirectory, "index.html");
+      const boot = "\n      window.booted = true;\n    ";
+      yield* fs.writeFileString(
+        indexPath,
+        `<html><head><script>${boot}</script></head><body></body></html>`,
+      );
+
+      yield* applyWebBrandAssets("awake", targetDirectory);
+
+      const html = yield* fs.readFileString(indexPath);
+      assert.notInclude(html, "<script>");
+      const [script] = yield* fs.readDirectory(path.join(targetDirectory, "assets"));
+      assert.match(script ?? "", /^awake-boot-[0-9a-f]{16}\.js$/);
+      assert.include(html, `<script src="/assets/${script}"></script>`);
+      assert.strictEqual(
+        yield* fs.readFileString(path.join(targetDirectory, "assets", script ?? "")),
+        boot,
+      );
+      // A second pass, as a rerun of the step would make, changes nothing.
+      yield* applyWebBrandAssets("awake", targetDirectory);
+      assert.strictEqual(yield* fs.readFileString(indexPath), html);
+    }),
+  );
+
   it.effect("resolves an empty target directory to the repo root", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
