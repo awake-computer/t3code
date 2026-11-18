@@ -38,6 +38,7 @@ import {
 import { useEnvironment } from "../state/environments";
 import { useEnvironmentScope, usePreparedConnection } from "../state/session";
 import { chooseRecordingMicrophone } from "./browserMicrophones";
+import { voiceControlsShown } from "./voiceControls";
 import { createBrowserVoiceInputPlatform } from "./browserVoiceInput";
 import { preferredSpeechLanguages } from "./preferredSpeechLanguages";
 import { runEnvironmentSpeech } from "./runEnvironmentSpeech";
@@ -573,6 +574,7 @@ export function useEnvironmentSpeechInput(input: HookInput) {
           (status?.prepared === prepared && status.value?.supported !== false));
   return {
     available:
+      voiceControlsShown() &&
       destinationReady &&
       typeof navigator !== "undefined" &&
       Boolean(navigator.mediaDevices?.getUserMedia) &&

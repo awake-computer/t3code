@@ -159,3 +159,11 @@ same environment, language, and dictionary as the composer, but skips transcript
 cleanup even when it is on, so you see what the model heard. Browser recording
 needs HTTPS or localhost and microphone permission; for a remote server over
 plain HTTP, use the desktop app.
+
+## In Awake's build
+
+Awake's build shows voice input only on a page that may ask for the microphone.
+Where the page's permissions policy refuses it, there is no microphone button,
+no dictation shortcut and no **Settings → Voice**, rather than a button that
+ends at "Mic blocked". A browser that can't say what the page's policy allows
+shows them as usual.

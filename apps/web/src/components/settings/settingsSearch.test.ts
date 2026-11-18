@@ -15,6 +15,7 @@ import {
   keptInAwakeBuild,
   movedSettingsPath,
   searchSettings,
+  settingsForThisPlatform,
   settingsNavGroupsFor,
   SETTINGS_NAV_GROUPS,
   SETTINGS_SEARCH_ITEMS,
@@ -419,5 +420,24 @@ describe("Awake's build", () => {
     expect(kept("network-access", "/settings/access")).toBe(false);
     expect(kept("boring-sidebar", "/settings/labs")).toBe(true);
     expect(kept("open-source-licenses", "/settings/about")).toBe(true);
+  });
+
+  it("leaves voice out of the sidebar where the page may not ask for the microphone", () => {
+    const paths = (voice: boolean) =>
+      settingsNavGroupsFor(true, voice).flatMap((group) => group.paths);
+    expect(paths(true)).toContain("/settings/voice");
+    expect(paths(false)).toEqual(paths(true).filter((path) => path !== "/settings/voice"));
+    expect(settingsNavGroupsFor(false).flatMap((group) => group.paths)).toEqual(paths(true));
+  });
+
+  it("leaves voice's settings and its shortcut out of the search with them", () => {
+    const found = (voice: boolean) => settingsForThisPlatform(SETTINGS_SEARCH_ITEMS, voice);
+    const ofVoice = (item: SettingsSearchItem) =>
+      item.to === "/settings/voice" || item.id === "keybinding-composer.dictation";
+    const ids = (voice: boolean) => found(voice).map((item) => item.id);
+    expect(ids(true)).toContain("voice-microphone");
+    expect(ids(true)).toContain("keybinding-composer.dictation");
+    expect(found(false).filter(ofVoice)).toEqual([]);
+    expect(found(false)).toEqual(found(true).filter((item) => !ofVoice(item)));
   });
 });

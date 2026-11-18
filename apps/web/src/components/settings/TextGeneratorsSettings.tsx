@@ -60,6 +60,7 @@ import { Switch } from "../ui/switch";
 import { WizardFooter, WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "../ui/wizard";
 import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
 import { searchableSetting } from "./settingsSearch";
+import { voiceControlsShown } from "../../speech/voiceControls";
 import { SETTINGS_PICKER_TRIGGER_CLASSNAME, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const decodeTextGenerator = Schema.decodeUnknownOption(TextGeneratorConfig);
@@ -239,6 +240,11 @@ const TASKS = [
   },
   { key: "speechPostProcessingModelSelection", label: "Voice transcript cleanup" },
 ] as const;
+
+/** The tasks a page shows. The transcript cleanup's model is voice's, so it goes with voice. */
+function shownTasks(voice = voiceControlsShown()) {
+  return TASKS.filter((task) => voice || task.key !== "speechPostProcessingModelSelection");
+}
 
 /**
  * Connect checks the settings by listing the service's models and saves the generator; Use it then
@@ -453,7 +459,7 @@ function TextGeneratorWizard({
               </p>
               {/* One grid for all rows, so pickers and Test buttons line up in columns. */}
               <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-4">
-                {TASKS.map((task) => (
+                {shownTasks().map((task) => (
                   <TextGenerationTaskPicker
                     key={task.key}
                     environmentId={environmentId}

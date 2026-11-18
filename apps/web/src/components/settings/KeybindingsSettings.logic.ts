@@ -15,6 +15,7 @@ import {
 
 import { shortcutConflictKey, shortcutKeyFromEvent } from "../../keybindings";
 import { isMacPlatform } from "../../lib/utils";
+import { voiceControlsShown } from "../../speech/voiceControls";
 import { METRIC_OPTIONS, WINDOW_OPTIONS } from "../usage/usageShortcuts";
 
 // Rank every usage command; mixing rank and alphabetical comparisons makes order input-dependent.
@@ -247,12 +248,17 @@ export function groupKeybindingRows(
   });
 }
 
+/** Voice's one command, which a page with no voice control lists nowhere. */
+const DICTATION_COMMAND: KeybindingCommand = "composer.dictation";
+
 export function buildKeybindingRows(
   keybindings: ResolvedKeybindingsConfig,
   platform = navigator.platform,
+  voice = voiceControlsShown(),
 ): ReadonlyArray<KeybindingRow> {
   const rowsById = new Map<string, KeybindingRow>();
   for (const binding of keybindings) {
+    if (!voice && binding.command === DICTATION_COMMAND) continue;
     const defaultBinding = defaultBindingForBinding(binding);
     const key = shortcutToKeybindingInput(binding.shortcut);
     const when = whenAstToExpression(binding.whenAst);
@@ -360,11 +366,13 @@ export function buildWhenVariableOptions(): ReadonlyArray<WhenVariableOption> {
 
 export function buildKeybindingCommandOptions(
   keybindings: ResolvedKeybindingsConfig,
+  voice = voiceControlsShown(),
 ): ReadonlyArray<KeybindingCommandOption> {
   const commands = new Set<KeybindingCommand>(STATIC_KEYBINDING_COMMANDS);
   for (const binding of keybindings) {
     commands.add(binding.command);
   }
+  if (!voice) commands.delete(DICTATION_COMMAND);
   return [...commands].toSorted((left, right) => compareCommands(left, right, commandLabel));
 }
 

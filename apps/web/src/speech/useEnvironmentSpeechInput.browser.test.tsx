@@ -31,6 +31,7 @@ import { writeBrowserClientSettings } from "../clientPersistenceStorage";
 
 const mocks = vi.hoisted(() => ({
   voice: undefined as unknown as ReturnType<typeof useEnvironmentSpeechInput>,
+  voiceControlsShown: true,
   settings: {} as Record<string, unknown>,
   connected: new Set<string>(),
   voiceCapable: new Set<string>(),
@@ -112,6 +113,7 @@ vi.mock("../hooks/useSettings", () => ({
     }),
 }));
 vi.mock("./runEnvironmentSpeech", () => ({ runEnvironmentSpeech: Effect.runPromise }));
+vi.mock("./voiceControls", () => ({ voiceControlsShown: () => mocks.voiceControlsShown }));
 vi.mock("../components/ui/toast", () => ({ toastManager: { add: vi.fn() } }));
 vi.mock("@t3tools/client-runtime/voice-input", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@t3tools/client-runtime/voice-input")>()),
@@ -206,6 +208,7 @@ vi.mock("./browserVoiceInput", () => ({
 const THREAD_ENV = "thread-env";
 
 function setup(options: { readonly destination?: string | null } = {}) {
+  mocks.voiceControlsShown = true;
   mocks.settings = {};
   setDestination(options.destination ?? null);
   if (!options.destination) localStorage.removeItem("t3code:voice-audio-grant:v1");
@@ -812,4 +815,13 @@ it("lets the user retry after a status failure without reselecting the destinati
   await act(() => mocks.voice.start());
   await act(() => mocks.voice.stop());
   expect(mocks.transcribeCalls).toEqual(["env-a"]);
+});
+
+it("is unavailable where the page may not ask for the microphone", async () => {
+  setup({ destination: "env-a" });
+  mocks.voiceControlsShown = false;
+  await using _screen = await render(<Probe />);
+  // The composer's and the editors' microphones and the dictation shortcut all gate on this.
+  expect(mocks.voice.available).toBe(false);
+  expect(mocks.microphoneRequests).toEqual([]);
 });

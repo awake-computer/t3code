@@ -38,6 +38,12 @@ const DIFF_MARK = "Good to see you";
 const SIGNED_OUT_MARK = "opens a terminal here and runs";
 // The box names the agent by its driver: "Claude".
 const SIGN_IN = "Sign in to Claude";
+// The Permissions-Policy of Awake's gateway. It gives no page from a box the microphone, so Awake
+// Chat draws none of voice's controls: no microphone button, and no way to Voice's settings.
+const GATEWAY_PERMISSIONS =
+  "clipboard-read=(), clipboard-write=(self), camera=(), microphone=(), geolocation=(), " +
+  "usb=(), serial=(), hid=(), payment=()";
+const VOICE_CONTROLS = '[aria-label="Start voice input"], a[href$="/settings/voice"]';
 // A dev server an agent started on the box, which Awake's console opens in Chat's Browser panel
 // (Awake's FDD-0060 §5.4).
 const DEV_SERVER_PORT = 5173;
@@ -359,16 +365,6 @@ function views(input: {
             ?.evaluate(deepTextCheck(DEV_PAGE_TITLE))
             .then((value) => value === true)
             .catch(() => false) ?? Promise.resolve(false);
-        // Awake's gateway sets the whole content policy over the box's, and with it who may frame
-        // Chat. With no gateway here, the stand-in console takes T3 Code's own refusal off.
-        await page.route(`${origin}/**`, async (route) => {
-          if (route.request().resourceType() !== "document") return route.fallback();
-          const response = await route.fetch();
-          const headers = { ...response.headers() };
-          delete headers["content-security-policy"];
-          delete headers["x-frame-options"];
-          return route.fulfill({ response, headers });
-        });
         // First as a cold Chat takes the link, at its first load; what it shows is logged when
         // the page doesn't come, and the capture goes on as a Chat that has loaded before.
         await page.goto(CONSOLE_ORIGIN);
@@ -557,8 +553,8 @@ try {
     "{",
   );
 
-  // The Browser panel's capture answers Chat's documents itself (below), and Chrome takes a page
-  // answered that way for a public one, whose socket to this machine it would refuse.
+  // Every capture answers Chat's documents itself (below), and Chrome takes a page answered that
+  // way for a public one, whose socket to this machine it would refuse.
   const browser = await chromium.launch({
     args: ["--disable-features=LocalNetworkAccessChecks,LocalNetworkAccessChecksWebSockets"],
   });
@@ -594,6 +590,17 @@ try {
             colorScheme: theme.colorScheme,
             reducedMotion: "reduce",
           });
+          // Chat's documents answer as Awake's gateway answers them. It sets the whole content
+          // policy over the box's, so T3 Code's own refusal to be framed goes, and it gives no
+          // page from a box the microphone.
+          await context.route(`${origin}/**`, async (route) => {
+            if (route.request().resourceType() !== "document") return route.fallback();
+            const response = await route.fetch();
+            const headers = { ...response.headers(), "permissions-policy": GATEWAY_PERMISSIONS };
+            delete headers["content-security-policy"];
+            delete headers["x-frame-options"];
+            return route.fulfill({ response, headers });
+          });
           const page = await context.newPage();
           page.on("pageerror", (error) => pageErrors.push(redact(error.message)));
           page.on("console", (message) => {
@@ -606,6 +613,10 @@ try {
               await view.open(page);
               await page.evaluate("document.fonts.ready.then(() => true)");
               await page.waitForTimeout(500);
+              for (const frame of page.frames()) {
+                const drawn = await frame.locator(VOICE_CONTROLS).count();
+                if (drawn > 0) throw new Error(`${String(drawn)} voice control(s) are drawn`);
+              }
               await page.screenshot({ path: NodePath.join(out, name), animations: "disabled" });
               captured.push(name);
             } catch (error) {

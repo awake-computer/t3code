@@ -8,6 +8,7 @@ import {
 import { resolveShortcutCommand } from "../../keybindings";
 
 import {
+  buildKeybindingCommandOptions,
   buildKeybindingRows,
   buildWhenVariableOptions,
   keybindingConflictLabels,
@@ -59,6 +60,19 @@ describe("KeybindingsSettings.logic", () => {
     expect(buildKeybindingRows(bindings.slice(1)).map((row) => row.id)).toEqual(
       rows.map((row) => row.id),
     );
+  });
+
+  it("lists the dictation shortcut only where voice's controls are shown", () => {
+    const bindings = compileResolvedKeybindingsConfig([
+      { command: "chat.new", key: "mod+n" },
+      { command: "composer.dictation", key: "mod+shift+d" },
+    ]);
+    const commands = (voice: boolean) =>
+      buildKeybindingRows(bindings, "MacIntel", voice).map((row) => row.command);
+    expect(commands(true)).toEqual(["chat.new", "composer.dictation"]);
+    expect(commands(false)).toEqual(["chat.new"]);
+    expect(buildKeybindingCommandOptions(bindings, true)).toContain("composer.dictation");
+    expect(buildKeybindingCommandOptions(bindings, false)).not.toContain("composer.dictation");
   });
 
   it("captures platform-specific mod shortcuts", () => {

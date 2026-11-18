@@ -12,6 +12,7 @@ import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
+import { voiceControlsShown } from "../../speech/voiceControls";
 import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import { commandLabel } from "./KeybindingsSettings.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
@@ -184,14 +185,25 @@ const AWAKE_OMITTED_SETTINGS_IDS: ReadonlySet<string> = new Set([
   "keep-awake-while-agents-work",
 ]);
 
+/** A setting of voice's: the Voice page's own, and the dictation shortcut's keybinding. */
+function isVoiceSetting(item: Pick<SettingsSearchItem, "id" | "to">): boolean {
+  return (
+    item.to === "/settings/voice" || item.id === keybindingSearchAnchorId("composer.dictation")
+  );
+}
+
 /** Whether Awake's build keeps a setting: on a page it keeps, and not a row it leaves out. */
 export function keptInAwakeBuild(item: Pick<SettingsSearchItem, "id" | "to">): boolean {
   return !AWAKE_OMITTED_SETTINGS_PATHS.has(item.to) && !AWAKE_OMITTED_SETTINGS_IDS.has(item.id);
 }
 
 /** The sidebar's groups for a build, without the pages it leaves out or a group left empty. */
-export function settingsNavGroupsFor(awake: boolean): ReadonlyArray<SettingsNavGroup> {
-  const shown = (path: SettingsPath) => !awake || !AWAKE_OMITTED_SETTINGS_PATHS.has(path);
+export function settingsNavGroupsFor(
+  awake: boolean,
+  voice = voiceControlsShown(awake),
+): ReadonlyArray<SettingsNavGroup> {
+  const shown = (path: SettingsPath) =>
+    (!awake || !AWAKE_OMITTED_SETTINGS_PATHS.has(path)) && (voice || path !== "/settings/voice");
   const groups = ALL_SETTINGS_NAV_GROUPS.map((group) => ({
     ...group,
     paths: group.paths.filter(shown),
@@ -1573,12 +1585,14 @@ export function filterAvailableSettingsSearchItems(
 /** The settings that exist on this platform and app channel. */
 export function settingsForThisPlatform(
   items: ReadonlyArray<SettingsSearchItem>,
+  voice = voiceControlsShown(),
 ): ReadonlyArray<SettingsSearchItem> {
   const platform = typeof navigator === "undefined" ? "" : navigator.platform;
   return items.filter(
     (item) =>
       (isElectron || item.desktopOnly !== true) &&
       (!IS_AWAKE_BRAND || keptInAwakeBuild(item)) &&
+      (voice || !isVoiceSetting(item)) &&
       (!item.releaseChannelOnly || isElectron || HOSTED_APP_CHANNEL !== null) &&
       (!item.secretsFeatureOnly || isSecretsFeatureEnabled) &&
       (!item.macOnly || isMacPlatform(platform)) &&
