@@ -44,6 +44,8 @@ const GATEWAY_PERMISSIONS =
   "clipboard-read=(), clipboard-write=(self), camera=(), microphone=(), geolocation=(), " +
   "usb=(), serial=(), hid=(), payment=()";
 const VOICE_CONTROLS = '[aria-label="Start voice input"], a[href$="/settings/voice"]';
+// The id an agent's own theme is published under, for the check that it takes Match Awake's place.
+const AGENT_THEME = "agent-made";
 // A dev server an agent started on the box, which Awake's console opens in Chat's Browser panel
 // (Awake's FDD-0060 §5.4).
 const DEV_SERVER_PORT = 5173;
@@ -636,6 +638,30 @@ try {
           await context.close();
         }
       }
+
+    // Themes an agent may write stay, with Match Awake the default (Awake's FDD-0053). `t3 theme
+    // set` publishes a theme and makes it the box's, and every page takes the box's theme once
+    // each time it's set. So an agent's takes Match Awake's place, for a member who chose none too.
+    const themeContext = await browser.newContext({ storageState, viewport: WIDTHS[0] });
+    try {
+      const themePage = await themeContext.newPage();
+      await themePage.goto(`${origin}/`);
+      const themeIs = (id: string) =>
+        themePage
+          .evaluate(`localStorage.getItem('t3code:theme') === '${id}'`)
+          .then((value) => value === true)
+          .catch(() => false);
+      await waitFor(() => themeIs("awake"), "Match Awake on a new page", 30_000);
+      t3(["theme", "set", NodePath.resolve(options.theme), "--id", AGENT_THEME]);
+      await waitFor(() => themeIs(AGENT_THEME), "an agent's theme to take Awake's place", 30_000);
+      t3(["theme", "set", "awake"]);
+      await waitFor(() => themeIs("awake"), "Match Awake once it's set again", 30_000);
+      console.log("[awake-screenshots] an agent's theme took Match Awake's place, and back.");
+    } catch (error) {
+      fail("an agent's theme", error);
+    } finally {
+      await themeContext.close();
+    }
   } finally {
     await browser.close();
   }
