@@ -251,11 +251,15 @@ export function injectMcpAppCookieBootstrap(html: string): string {
   return `${prefix}${bootstrap}${html.slice(prefix.length)}`;
 }
 
-export function mcpAppAllowAttribute(permissions: McpAppPermissions | undefined): string {
+/** With `devices` false the frame gets no camera, microphone or location, whatever it declares. */
+export function mcpAppAllowAttribute(
+  permissions: McpAppPermissions | undefined,
+  devices = true,
+): string {
   const features: Array<string> = [];
-  if (permissions?.camera) features.push("camera");
-  if (permissions?.microphone) features.push("microphone");
-  if (permissions?.geolocation) features.push("geolocation");
+  if (devices && permissions?.camera) features.push("camera");
+  if (devices && permissions?.microphone) features.push("microphone");
+  if (devices && permissions?.geolocation) features.push("geolocation");
   if (permissions?.clipboardWrite) features.push("clipboard-write");
   return features.join("; ");
 }

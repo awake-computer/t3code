@@ -72,4 +72,28 @@ describe("McpAppFrame", () => {
     expect(screen.getByRole("button", { name: "Show app" }).query()).toBeNull();
     await expect.element(screen.getByTitle("Demo app")).toBeInTheDocument();
   });
+
+  it("keeps the app's origin opaque and delegates the permissions it declares", async () => {
+    await using screen = await render(
+      <McpAppFrame
+        environmentId={EnvironmentId.make("environment")}
+        threadId={ThreadId.make("thread")}
+        conversationThreadId={ThreadId.make("thread")}
+        itemId={TurnItemId.make("item")}
+        revision="1"
+        app={{
+          attachmentId: "attachment",
+          server: "Demo",
+          tool: "show",
+          resourceUri: "ui://demo/app",
+          permissions: { camera: {}, microphone: {}, geolocation: {}, clipboardWrite: {} },
+        }}
+        onSendMessage={undefined}
+      />,
+    );
+    const frame = screen.getByTitle("Demo app");
+    const declared = "camera; microphone; geolocation; clipboard-write";
+    await expect.element(frame).toHaveAttribute("sandbox", "allow-scripts allow-forms");
+    await expect.element(frame).toHaveAttribute("allow", declared);
+  });
 });

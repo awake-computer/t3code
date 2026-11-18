@@ -24,7 +24,7 @@ import { useEffect, useRef, useState, type FocusEvent, type ToggleEvent } from "
 import { flushSync } from "react-dom";
 
 import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
-import { APP_VERSION } from "~/branding";
+import { APP_VERSION, IS_AWAKE_BRAND } from "~/branding";
 import { isConfirmDialogActive, requestConfirmDialog } from "~/confirmDialog";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { useStableCallback } from "~/hooks/useStableCallback";
@@ -481,7 +481,9 @@ export function McpAppFrame(props: {
             title={`${app.server} app`}
             // Omitting allow-same-origin isolates the app from the session.
             sandbox="allow-scripts allow-forms"
-            allow={mcpAppAllowAttribute(app.permissions)}
+            // Awake's gateway gives no page from a box a device, and not every browser reads that
+            // header for a frame, so Awake's build hands an app's frame none either.
+            allow={mcpAppAllowAttribute(app.permissions, !IS_AWAKE_BRAND)}
             onLoad={onFrameLoad}
             className={cn("block w-full border-0", fullscreen ? "min-h-0 flex-1" : "h-full")}
             style={{ colorScheme: theme.appearance }}

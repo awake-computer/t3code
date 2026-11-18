@@ -6,11 +6,13 @@ import {
   injectMcpAppThemeBootstrap,
   injectMcpAppCookieBootstrap,
   MCP_APP_COLOR_SCHEME_PARAM,
+  mcpAppAllowAttribute,
   mcpAppContentSecurityPolicy,
   mcpAppToolCallableByApp,
   mcpAppToolResourceUri,
   readMcpAppCsp,
   readMcpAppReference,
+  type McpAppPermissions,
 } from "./mcpApp.ts";
 
 describe("mcpAppContentSecurityPolicy", () => {
@@ -299,5 +301,34 @@ describe("MCP App cookie bootstrap", () => {
     });
     expect(() => execute(injectMcpAppCookieBootstrap(vendor), document)).toThrow(failure);
     expect(() => Reflect.get(document, "cookie")).toThrow(failure);
+  });
+});
+
+describe("mcpAppAllowAttribute", () => {
+  const everything: McpAppPermissions = {
+    camera: {},
+    microphone: {},
+    geolocation: {},
+    clipboardWrite: {},
+  };
+
+  it("delegates each permission the app declares, and nothing it doesn't", () => {
+    expect(mcpAppAllowAttribute(undefined)).toBe("");
+    expect(mcpAppAllowAttribute({})).toBe("");
+    expect(mcpAppAllowAttribute({ camera: {} })).toBe("camera");
+    expect(mcpAppAllowAttribute({ microphone: {} })).toBe("microphone");
+    expect(mcpAppAllowAttribute({ geolocation: {} })).toBe("geolocation");
+    expect(mcpAppAllowAttribute({ clipboardWrite: {} })).toBe("clipboard-write");
+    const all = "camera; microphone; geolocation; clipboard-write";
+    expect(mcpAppAllowAttribute(everything)).toBe(all);
+  });
+
+  it("hands the frame no device where devices are withheld, whatever the app declares", () => {
+    expect(mcpAppAllowAttribute(undefined, false)).toBe("");
+    expect(mcpAppAllowAttribute({ camera: {} }, false)).toBe("");
+    expect(mcpAppAllowAttribute({ microphone: {} }, false)).toBe("");
+    expect(mcpAppAllowAttribute({ geolocation: {} }, false)).toBe("");
+    expect(mcpAppAllowAttribute({ clipboardWrite: {} }, false)).toBe("clipboard-write");
+    expect(mcpAppAllowAttribute(everything, false)).toBe("clipboard-write");
   });
 });
