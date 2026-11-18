@@ -157,7 +157,10 @@ const throughProxy = (proxyPort: number, extra: Readonly<Record<string, string>>
     HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
     NO_PROXY: "localhost,127.0.0.1",
     ...extra,
-  }).pipe(Effect.andThen(publicProxy));
+  }).pipe(
+    Effect.andThen(publicProxy),
+    Effect.map(({ port }) => port),
+  );
 
 const echoOf = (socket: NodeNet.Socket, text: string) =>
   Effect.callback<string>((resume) => {
@@ -247,6 +250,7 @@ describe("publicProxy through the environment's proxy", () => {
     Effect.gen(function* () {
       const port = yield* withEnvironment({ HTTPS_PROXY: "socks5://127.0.0.1:1" }).pipe(
         Effect.andThen(publicProxy),
+        Effect.map(({ port }) => port),
       );
       const { code, socket } = yield* connectThrough(
         port,
