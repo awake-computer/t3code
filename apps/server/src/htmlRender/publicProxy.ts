@@ -5,6 +5,8 @@ import * as NodeOS from "node:os";
 
 import * as Effect from "effect/Effect";
 
+import { proxyFromFile } from "../preview/BrowserProxyFile.ts";
+
 const LOCAL_ADDRESSES = new NodeNet.BlockList();
 for (const [network, prefix] of [
   ["0.0.0.0", 8],
@@ -108,9 +110,10 @@ const isLocalName = (host: string) => {
 };
 
 /**
- * Awake: the HTTP proxy the server's environment names, HTTPS_PROXY, which renders reach the internet
- * through where a host has no direct way out, and NO_PROXY's hosts, which they reach directly, as
- * before. `url` is null for a proxy named in a form this can't use, so nothing goes around it.
+ * Awake: the HTTP proxy renders reach the internet through where a host has no direct way out, the
+ * one the host's file names (BrowserProxyFile.ts) or else HTTPS_PROXY, and NO_PROXY's hosts, which
+ * they reach directly, as before. `url` is null for a proxy this can't use, one named in another
+ * form or in a file it can't read, so nothing goes around it.
  */
 interface UpstreamProxy {
   readonly url: URL | null;
@@ -126,15 +129,24 @@ const proxyUrl = (named: string) => {
   }
 };
 
+// Null for a file that can't be read: the host named a proxy there, and no other takes its place.
+const namedProxy = (env: NodeJS.ProcessEnv) => {
+  try {
+    return proxyFromFile(env) ?? ((env.HTTPS_PROXY ?? env.https_proxy)?.trim() || undefined);
+  } catch {
+    return null;
+  }
+};
+
 const upstreamProxy = (env: NodeJS.ProcessEnv): UpstreamProxy | undefined => {
-  const named = (env.HTTPS_PROXY ?? env.https_proxy)?.trim();
-  if (!named) return undefined;
+  const named = namedProxy(env);
+  if (named === undefined) return undefined;
   const direct = (env.NO_PROXY ?? env.no_proxy ?? "")
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry) => entry.length > 0);
-  if (direct.includes("*")) return undefined;
-  return { url: proxyUrl(named), direct };
+  if (named !== null && direct.includes("*")) return undefined;
+  return { url: named === null ? null : proxyUrl(named), direct };
 };
 
 // A NO_PROXY entry: a host or an IP address, or a domain that covers its subdomains, with or without
@@ -250,7 +262,7 @@ export const publicProxy = Effect.acquireRelease(
           early.push(chunk);
         };
         client.on("data", holdEarly);
-        // Awake: through the environment's proxy, by name, where it names one and NO_PROXY doesn't
+        // Awake: through the host's proxy, by name, where it names one and NO_PROXY doesn't
         // list the host. Local targets are refused first, as for a direct connection.
         if (through !== undefined && !reachedDirectly(through.direct, request.host, request.port)) {
           const proxy = through.url;

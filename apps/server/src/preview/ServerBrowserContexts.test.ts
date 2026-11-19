@@ -8,6 +8,7 @@ import { INCOGNITO_BROWSER_PROFILE_ID } from "@t3tools/contracts";
 import { chromium, type Browser, type BrowserContext, type BrowserType } from "playwright-core";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { PROXY_FILE_VARIABLE } from "./BrowserProxyFile.ts";
 import { ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 
 const launches = vi.hoisted(() => ({
@@ -345,6 +346,35 @@ describe("ServerBrowserContexts", () => {
     await direct.contextFor("default");
     expect(launches.persistent.mock.calls[0]?.[1]).not.toHaveProperty("proxy");
     await direct.close();
+  });
+
+  it("reads the file for the browser's proxy at each launch, and keeps nothing of it", async () => {
+    const main = "http://egress.awake:3128";
+    const own = "http://egress.awake:3130";
+    const next = "http://egress.awake:3131";
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-proxy-file-test-"));
+    const file = NodePath.join(directory, "proxy");
+    launches.persistent.mockImplementation(async () => makeContext() as unknown as BrowserContext);
+    const env = { HTTPS_PROXY: main, [PROXY_FILE_VARIABLE]: file };
+    const pool = new ServerBrowserContexts({ ...options(), env });
+    try {
+      await pool.contextFor("before");
+      NodeFS.writeFileSync(file, `${own}\n`);
+      await pool.contextFor("appeared");
+      NodeFS.writeFileSync(file, `${next}\n`);
+      await pool.contextFor("changed");
+      NodeFS.rmSync(file);
+      await pool.contextFor("gone");
+      const servers = launches.persistent.mock.calls.map(([, launch]) => launch?.proxy?.server);
+      expect(servers).toEqual([main, own, next, main]);
+      // A directory in the file's place can't be read, and no browser starts on another proxy.
+      NodeFS.mkdirSync(file);
+      await expect(pool.contextFor("unreadable")).rejects.toThrow(PROXY_FILE_VARIABLE);
+      expect(launches.persistent).toHaveBeenCalledTimes(4);
+    } finally {
+      await pool.close();
+      NodeFS.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("retries a failed startup on a later request with sandboxing still enabled", async () => {

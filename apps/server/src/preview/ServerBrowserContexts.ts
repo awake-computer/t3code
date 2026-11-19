@@ -129,7 +129,7 @@ export class ServerBrowserContexts {
   private async launchOptions() {
     const executable = await this.options.executable();
     const env = this.options.env ?? process.env;
-    // Awake: through the proxy the environment names, where a host has no direct way out.
+    // Awake: through the proxy the host names, read anew at each launch.
     const proxy = browserProxy(env);
     return {
       executable,

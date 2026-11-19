@@ -4,9 +4,12 @@ import { vi } from "vite-plus/test";
 import * as Effect from "effect/Effect";
 import type * as NodeDns from "node:dns";
 import * as NodeDnsPromises from "node:dns/promises";
+import * as NodeFS from "node:fs";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 
+import { PROXY_FILE_VARIABLE } from "../preview/BrowserProxyFile.ts";
 import { publicProxy } from "./publicProxy.ts";
 
 const OWN_PUBLIC_IPV4 = "198.51.100.7";
@@ -141,16 +144,24 @@ const standInProxy = (status: string) =>
       }),
   );
 
+const STUBBED = ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", PROXY_FILE_VARIABLE];
+
 // The environment each render's proxy reads when it starts, for this test alone.
 const withEnvironment = (env: Readonly<Record<string, string>>) =>
   Effect.acquireRelease(
     Effect.sync(() => {
-      for (const name of ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"]) {
+      for (const name of STUBBED) {
         vi.stubEnv(name, env[name] ?? "");
       }
     }),
     () => Effect.sync(() => vi.unstubAllEnvs()),
   );
+
+// Awake: where a test keeps the file a host names its browser's own proxy in, gone with the test.
+const proxyFileDirectory = Effect.acquireRelease(
+  Effect.sync(() => NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-proxy-file-test-"))),
+  (directory) => Effect.sync(() => NodeFS.rmSync(directory, { recursive: true, force: true })),
+);
 
 const throughProxy = (proxyPort: number, extra: Readonly<Record<string, string>> = {}) =>
   withEnvironment({
@@ -258,6 +269,109 @@ describe("publicProxy through the environment's proxy", () => {
       );
       socket.destroy();
       expect(code).toBe(1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reaches a name through the proxy the host's file names, in HTTPS_PROXY's place", () =>
+    Effect.gen(function* () {
+      const main = yield* standInProxy("200 Connection established");
+      const own = yield* standInProxy("200 Connection established");
+      const file = NodePath.join(yield* proxyFileDirectory, "proxy");
+      NodeFS.writeFileSync(file, `http://127.0.0.1:${own.port}\n`);
+      const port = yield* throughProxy(main.port, { [PROXY_FILE_VARIABLE]: file });
+      const page = domainTarget("pages.example.invalid", 443);
+      const { code, socket } = yield* connectThrough(port, page);
+      expect(code).toBe(0);
+      expect(yield* echoOf(socket, "hello")).toBe("hello");
+      socket.destroy();
+      expect(own.requests).toEqual([
+        "CONNECT pages.example.invalid:443 HTTP/1.1\r\nHost: pages.example.invalid:443",
+      ]);
+      expect(main.requests).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("follows the file from one render's proxy to the next, and keeps nothing of it", () =>
+    Effect.gen(function* () {
+      const main = yield* standInProxy("200 Connection established");
+      const own = yield* standInProxy("200 Connection established");
+      const next = yield* standInProxy("200 Connection established");
+      const file = NodePath.join(yield* proxyFileDirectory, "proxy");
+      const env = { HTTPS_PROXY: `http://127.0.0.1:${main.port}`, [PROXY_FILE_VARIABLE]: file };
+      yield* withEnvironment(env);
+      const page = domainTarget("pages.example.invalid", 443);
+      // One render: its proxy starts, carries one tunnel, and closes with the render.
+      const tunnels = Effect.gen(function* () {
+        const { port } = yield* publicProxy;
+        const { code, socket } = yield* connectThrough(port, page);
+        socket.destroy();
+        expect(code).toBe(0);
+        return [main.requests.length, own.requests.length, next.requests.length];
+      }).pipe(Effect.scoped);
+      expect(yield* tunnels).toEqual([1, 0, 0]);
+      NodeFS.writeFileSync(file, `http://127.0.0.1:${own.port}\n`);
+      expect(yield* tunnels).toEqual([1, 1, 0]);
+      NodeFS.writeFileSync(file, `http://127.0.0.1:${next.port}\n`);
+      expect(yield* tunnels).toEqual([1, 1, 1]);
+      NodeFS.writeFileSync(file, "\n");
+      expect(yield* tunnels).toEqual([2, 1, 1]);
+      NodeFS.rmSync(file);
+      expect(yield* tunnels).toEqual([3, 1, 1]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("takes the file's proxy with no HTTPS_PROXY, and keeps local targets from it", () =>
+    Effect.gen(function* () {
+      const own = yield* standInProxy("200 Connection established");
+      const file = NodePath.join(yield* proxyFileDirectory, "proxy");
+      NodeFS.writeFileSync(file, `http://127.0.0.1:${own.port}\n`);
+      const env = { NO_PROXY: ".internal.invalid", [PROXY_FILE_VARIABLE]: file };
+      const { port } = yield* withEnvironment(env).pipe(Effect.andThen(publicProxy));
+      for (const target of [
+        ipv4Target("127.0.0.1", 80),
+        ipv4Target("10.1.2.3", 80),
+        domainTarget("localhost", 80),
+        domainTarget("app.localhost", 80),
+        domainTarget("api.internal.invalid", 443),
+      ]) {
+        const { code, socket } = yield* connectThrough(port, target);
+        socket.destroy();
+        expect(code).toBe(2);
+      }
+      expect(own.requests).toEqual([]);
+      const page = domainTarget("pages.example.invalid", 443);
+      const { code, socket } = yield* connectThrough(port, page);
+      socket.destroy();
+      expect(code).toBe(0);
+      expect(own.requests).toHaveLength(1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses every target when the file can't be read, and takes no other proxy", () =>
+    Effect.gen(function* () {
+      const main = yield* standInProxy("200 Connection established");
+      // A directory in the file's place: unlike a mode, it stops root's read too.
+      const directory = yield* proxyFileDirectory;
+      const port = yield* throughProxy(main.port, { [PROXY_FILE_VARIABLE]: directory });
+      const page = domainTarget("pages.example.invalid", 443);
+      const { code, socket } = yield* connectThrough(port, page);
+      socket.destroy();
+      expect(code).toBe(1);
+      expect(main.requests).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses every target when the file's proxy isn't one it can use", () =>
+    Effect.gen(function* () {
+      const main = yield* standInProxy("200 Connection established");
+      const file = NodePath.join(yield* proxyFileDirectory, "proxy");
+      NodeFS.writeFileSync(file, "socks5://127.0.0.1:1\n");
+      const port = yield* throughProxy(main.port, { [PROXY_FILE_VARIABLE]: file });
+      const page = domainTarget("pages.example.invalid", 443);
+      const { code, socket } = yield* connectThrough(port, page);
+      socket.destroy();
+      expect(code).toBe(1);
+      expect(main.requests).toEqual([]);
     }).pipe(Effect.scoped),
   );
 });

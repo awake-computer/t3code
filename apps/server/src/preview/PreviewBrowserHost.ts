@@ -5,6 +5,8 @@ import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import { proxyFromFile } from "./BrowserProxyFile.ts";
+
 export const SETUP_SUBCOMMAND = "browser setup";
 
 export const NO_SANDBOX_SIGNATURE = "No usable sandbox";
@@ -25,14 +27,15 @@ const variable = (env: Readonly<Record<string, string | undefined>>, name: strin
   (env[name] ?? env[name.toLowerCase()])?.trim() || undefined;
 
 /**
- * Awake: the browser's proxy, HTTPS_PROXY, bypassed for loopback alone, so a local dev server is
- * reached directly and Playwright adds no `<-loopback>`; NO_PROXY's other hosts, the host's own
- * services, go through the proxy too. None when no proxy is named, or NO_PROXY is `*`.
+ * Awake: the browser's proxy, the one the host's file names (BrowserProxyFile.ts) or else
+ * HTTPS_PROXY, bypassed for loopback alone, so a local dev server is reached directly and
+ * Playwright adds no `<-loopback>`; NO_PROXY's other hosts, the host's own services, go through
+ * the proxy too. None when no proxy is named, or NO_PROXY is `*`.
  */
 export const browserProxy = (
   env: Readonly<Record<string, string | undefined>>,
 ): { readonly server: string; readonly bypass: string } | undefined => {
-  const server = variable(env, "HTTPS_PROXY");
+  const server = proxyFromFile(env) ?? variable(env, "HTTPS_PROXY");
   if (server === undefined) return undefined;
   const direct = (variable(env, "NO_PROXY") ?? "").split(",").map((host) => host.trim());
   if (direct.includes("*")) return undefined;
