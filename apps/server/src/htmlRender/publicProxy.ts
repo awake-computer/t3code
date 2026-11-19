@@ -129,7 +129,7 @@ const proxyUrl = (named: string) => {
   }
 };
 
-// Null for a file that can't be read: the host named a proxy there, and no other takes its place.
+// Null where the host's file can't be read or names no http:// URL: no other takes its place.
 const namedProxy = (env: NodeJS.ProcessEnv) => {
   try {
     return proxyFromFile(env) ?? ((env.HTTPS_PROXY ?? env.https_proxy)?.trim() || undefined);

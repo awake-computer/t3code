@@ -68,9 +68,35 @@ describe("proxyFromFile", () => {
     // A directory in the file's place: unlike a mode, it stops root's read too.
     const message = `${PROXY_FILE_VARIABLE} names ${directory}, which can't be read.`;
     expect(() => proxyFromFile({ [PROXY_FILE_VARIABLE]: directory })).toThrow(message);
+    NodeFS.symlinkSync(NodePath.join(directory, "nothing"), file);
+    expect(() => proxyFromFile({ [PROXY_FILE_VARIABLE]: file })).toThrow("which can't be read");
+    NodeFS.rmSync(file);
     NodeFS.writeFileSync(file, OWN);
     const under = NodePath.join(file, "proxy");
-    expect(() => proxyFromFile({ [PROXY_FILE_VARIABLE]: under })).toThrow(PROXY_FILE_VARIABLE);
+    expect(() => proxyFromFile({ [PROXY_FILE_VARIABLE]: under })).toThrow("which can't be read");
+  });
+
+  it("reads through a link to a file that's there", () => {
+    const target = NodePath.join(directory, "target");
+    NodeFS.writeFileSync(target, `${OWN}\n`);
+    NodeFS.symlinkSync(target, file);
+    expect(proxyFromFile({ [PROXY_FILE_VARIABLE]: file })).toBe(OWN);
+  });
+
+  it("throws for a first line that isn't an http:// URL, and takes none of it", () => {
+    const env = { [PROXY_FILE_VARIABLE]: file };
+    const lines = [
+      "egress.awake:3130",
+      "socks5://egress.awake:3130",
+      "https://egress.awake:3130",
+      "HTTP://egress.awake:3130",
+      "http://",
+      `${OWN} ${MAIN}`,
+    ];
+    for (const line of lines) {
+      NodeFS.writeFileSync(file, `${line}\n`);
+      expect(() => proxyFromFile(env)).toThrow("whose first line isn't an http:// URL");
+    }
   });
 });
 
@@ -110,6 +136,12 @@ describe("browserProxy, with a file for the browser's own proxy", () => {
 
   it("refuses a file it can't read, and takes no other proxy", () => {
     const env = { HTTPS_PROXY: MAIN, [PROXY_FILE_VARIABLE]: directory };
+    expect(() => browserProxy(env)).toThrow(PROXY_FILE_VARIABLE);
+  });
+
+  it("refuses a line that isn't an http:// URL, and takes no other proxy", () => {
+    NodeFS.writeFileSync(file, "socks5://egress.awake:3130\n");
+    const env = { HTTPS_PROXY: MAIN, [PROXY_FILE_VARIABLE]: file };
     expect(() => browserProxy(env)).toThrow(PROXY_FILE_VARIABLE);
   });
 });

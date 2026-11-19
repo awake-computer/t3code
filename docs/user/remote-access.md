@@ -362,13 +362,13 @@ through it by name, and still never reach a local one.
 
 To give the browser a proxy of its own, apart from the one the rest of the
 server uses, set `T3CODE_SERVER_BROWSER_PROXY_FILE` to the path of a file whose
-first line names it. Browser tabs and HTML previews then go through that proxy
-in `HTTPS_PROXY`'s place, under the same rules. The file is read each time a
-browser starts, for a tab or for a preview, and nothing of it is kept, so a host
-can write, change or remove it while the server runs: with no file, or a blank
-one, they use `HTTPS_PROXY` as before. A file that is there and can't be read is
-an error, and so is a proxy they can't use: pages then don't load, and
-`HTTPS_PROXY` is never taken instead.
+first line is that proxy's `http://` URL. Browser tabs and HTML previews then go
+through it in `HTTPS_PROXY`'s place, under the same rules. The file is read each
+time a browser starts, for a tab or for a preview, and nothing of it is kept, so
+a host can write, change or remove it while the server runs: with no file, or a
+blank one, they use `HTTPS_PROXY` as before. A file that is there and can't be
+read is an error, and so is a first line that isn't an `http://` URL: pages then
+don't load, and `HTTPS_PROXY` is never taken instead.
 
 Awake Chat, Awake's build, sets all three in every box, with the box's own
 browser, and turns Chrome's sandbox off there, the box being the boundary.
