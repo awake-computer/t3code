@@ -27,7 +27,6 @@ export function useAwakeBoxState(
       }
       if (!stopped) timer = setTimeout(() => void ask(), AWAKE_BOX_POLL_MS);
     };
-    // oxlint-disable-next-line react/set-state-in-effect -- State changes only after the gateway answers.
     void ask();
     return () => {
       stopped = true;

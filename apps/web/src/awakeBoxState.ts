@@ -1,6 +1,7 @@
 /**
- * What Awake's gateway observes of the box under Chat while Chat reconnects: its own path
- * /__awake/box answers the cell's record of the box, never a guess. The composer's banner says it.
+ * What Awake's gateway observes of the box under Chat while Chat reconnects: its own path,
+ * `/__awake/box`, answers the cell's record of the box, never a guess. The composer's banner
+ * says it.
  */
 
 /** A box's state as the gateway names it. */

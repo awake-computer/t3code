@@ -60,12 +60,12 @@ describe("what Awake's gateway observes of the box", () => {
   });
 
   it("links back only to exactly the console's origin", () => {
-    const at = (link: unknown, origin: string | undefined = consoleOrigin) =>
+    const at = (link: unknown, origin: string | undefined) =>
       readAwakeBoxState({ state: "stopped", wakes: false, open: link }, origin, readAt)?.open;
-    expect(at(open)).toBe(open);
-    expect(at("https://app.awake.computer.evil.test/chat")).toBeNull();
-    expect(at("javascript:alert(1)")).toBeNull();
-    expect(at(42)).toBeNull();
+    expect(at(open, consoleOrigin)).toBe(open);
+    expect(at("https://app.awake.computer.evil.test/chat", consoleOrigin)).toBeNull();
+    expect(at("javascript:alert(1)", consoleOrigin)).toBeNull();
+    expect(at(42, consoleOrigin)).toBeNull();
     expect(at(open, undefined)).toBeNull();
   });
 
