@@ -9,7 +9,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import * as NodeUtil from "node:util";
-import { chromium, type Page } from "playwright-core";
+import { chromium, type Page, type WebSocketRoute } from "playwright-core";
 
 const repoRoot = NodeURL.fileURLToPath(new URL("..", import.meta.url));
 const { values: options } = NodeUtil.parseArgs({
@@ -479,7 +479,70 @@ function views(input: {
         await page.mouse.move(1, 1);
       },
     },
+    // The thread's banner once its box's connection drops: T3 Code's own words where Awake's
+    // gateway answers nothing; Awake's where it says Chat asked it to wake the box, and where it
+    // says the box is waking (Awake's FDD-0024).
+    { name: "box-reconnecting", last: true, open: droppedBox(openThread, null, /did not answer/) },
+    {
+      name: "box-asked",
+      last: true,
+      open: droppedBox(openThread, ASKED_BOX, /^Asked Awake to wake it/),
+    },
+    {
+      name: "box-waking",
+      last: true,
+      open: droppedBox(openThread, WAKING_BOX, /^Waking for \d+ s/),
+    },
   ];
+}
+
+// What Awake's gateway answers of a box asleep that Chat asked it to wake 4 s ago, and of one
+// waking, as /__awake/box says them.
+const ASKED_BOX = () =>
+  JSON.stringify({
+    state: "asleep",
+    asked: new Date(Date.now() - 4_000).toISOString(),
+    wakes: true,
+    open: `${CONSOLE_ORIGIN}/chat?box=box_screenshots`,
+  });
+const WAKING_BOX = () =>
+  JSON.stringify({
+    state: "waking",
+    wakes: false,
+    open: `${CONSOLE_ORIGIN}/chat?box=box_screenshots`,
+  });
+
+/**
+ * Opens the thread, then drops its connection and every one after, as a box that slept does, with
+ * Awake's gateway answering /__awake/box with box, or answering nothing, and waits for mark.
+ */
+function droppedBox(
+  openThread: (page: Page) => Promise<void>,
+  box: (() => string) | null,
+  mark: RegExp,
+): (page: Page) => Promise<void> {
+  return async (page) => {
+    const sockets: Array<WebSocketRoute> = [];
+    let dropped = false;
+    await page.routeWebSocket(/./, (ws) => {
+      if (dropped) {
+        void ws.close();
+        return;
+      }
+      sockets.push(ws);
+      ws.connectToServer();
+    });
+    await page.route(`${origin}/__awake/box`, (route) =>
+      box === null
+        ? route.fulfill({ status: 404 })
+        : route.fulfill({ status: 200, contentType: "application/json", body: box() }),
+    );
+    await openThread(page);
+    dropped = true;
+    await Promise.all(sockets.map((ws) => ws.close()));
+    await page.getByText(mark).first().waitFor({ timeout: 60_000 });
+    await page.mouse.move(1, 1);
+  };
 }
 
 const failures: Array<{ readonly step: string; readonly error: string }> = [];
@@ -676,8 +739,8 @@ try {
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
 
-// Eight views at every width, the Browser panel's among them.
-const expected = THEMES.length * WIDTHS.length * 8;
+// Eleven views at every width, the Browser panel's and the dropped box's three among them.
+const expected = THEMES.length * WIDTHS.length * 11;
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");

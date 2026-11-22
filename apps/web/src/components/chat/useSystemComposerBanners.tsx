@@ -1,8 +1,8 @@
 import { useStableCallback } from "../../hooks/useStableCallback";
-import { type EnvironmentId } from "@t3tools/contracts";
+import { awakeConsoleOriginFrom, type EnvironmentId } from "@t3tools/contracts";
 import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import { useAtomValue } from "@effect/atom-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   isAtomCommandInterrupted,
@@ -25,6 +25,10 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { ServerUpdateAction, serverUpdateStageLabel } from "../ServerUpdateAction";
 import { useAutoBalanceUpdateBanner } from "./useAutoBalanceUpdateBanner";
+import { awakeBoxBanner } from "../../awakeBoxState";
+import { IS_AWAKE_BRAND } from "../../branding";
+import { withAwakeBox } from "./awakeBoxBannerItem";
+import { useAwakeBoxState } from "./useAwakeBoxState";
 import { ComposerServerUpdateIcon } from "./ComposerServerUpdateStatus";
 import {
   dismissServerUpdateFailure,
@@ -71,6 +75,26 @@ export function useSystemComposerBanners(input: SystemComposerBannersInput) {
   const setEnvironmentEnabled = useAtomCommand(environmentCatalog.setEnabled, {
     reportFailure: false,
   });
+  // Awake's build reads what its gateway observes of the box while the box's own connection is
+  // down, and reconnects once the gateway observes the box running (FDD-0024 §6.3.1).
+  const awakeEnvironmentId =
+    IS_AWAKE_BRAND &&
+    activeEnvironmentUnavailableState !== null &&
+    activeEnvironment?.entry.target._tag === "PrimaryConnectionTarget"
+      ? activeEnvironmentUnavailableState.environmentId
+      : null;
+  const awakeBox = useAwakeBoxState(
+    awakeEnvironmentId !== null,
+    awakeConsoleOriginFrom(serverConfig?.awakeConsoleOrigin),
+  );
+  const awakeBoxRunning = awakeBox?.state === "running";
+  const reconnectAwakeBox = useStableCallback((environmentId: EnvironmentId) => {
+    void retryEnvironment(environmentId);
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reconnects once the gateway observes the box running, not at the next backoff
+  useEffect(() => {
+    if (awakeBoxRunning && awakeEnvironmentId !== null) reconnectAwakeBox(awakeEnvironmentId);
+  }, [awakeBoxRunning, awakeEnvironmentId, reconnectAwakeBox]);
   const activeEnvironmentConnectionPhase = activeEnvironment?.connection.phase ?? "available";
   const activeReconnectingEnvironmentId =
     activeEnvironmentConnectionPhase === "connecting" ||
@@ -187,7 +211,7 @@ export function useSystemComposerBanners(input: SystemComposerBannersInput) {
       unavailableConnection !== null &&
       !suppressUnavailableBanner;
     if (showUnavailableBanner) {
-      items.push({
+      const unavailableItem: ComposerBannerStackItem = {
         id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
         variant: unavailableConnection.phase === "error" ? "error" : "warning",
         group: "environment",
@@ -218,7 +242,9 @@ export function useSystemComposerBanners(input: SystemComposerBannersInput) {
             {disconnectAction}
           </>
         ),
-      });
+      };
+      const awake = awakeBoxBanner(awakeBox, activeEnvironmentUnavailableState.label);
+      items.push(awake === null ? unavailableItem : withAwakeBox(unavailableItem, awake, awakeBox));
     }
     // An available update is offered by the sidebar's update pill; the composer only shows one
     // that is running or failed, since either explains what this thread's server is doing.
