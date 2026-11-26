@@ -9,7 +9,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import * as NodeUtil from "node:util";
-import { chromium, type Page, type WebSocketRoute } from "playwright-core";
+import { chromium, type Frame, type Page, type WebSocketRoute } from "playwright-core";
 
 const repoRoot = NodeURL.fileURLToPath(new URL("..", import.meta.url));
 const { values: options } = NodeUtil.parseArgs({
@@ -64,16 +64,17 @@ button{margin-top:12px;padding:8px 16px;border-radius:8px;border:0;background:#1
 <section><h2>Enterprise</h2><div class="price">Talk to us</div><p>SSO, SCIM and audit.</p><button>Contact sales</button></section>
 </main></body></html>`;
 
-// A stand-in for Awake's console: a page at the console's origin that frames Awake Chat, as the
-// workspace's Chat tab does, and hands it a terminal's link once Chat says it can open one (protocol
-// v1's {awake: "chat", browser}), as the workspace's Open in box browser does.
+// A stand-in for Awake's console: a page at the console's origin that frames Awake Chat at its own
+// path, as the workspace's Chat tab does. At its root it hands Chat a terminal's link once Chat
+// says it can open one (protocol v1's {awake: "chat", browser}), as Open in box browser does.
 const CONSOLE_PORT = 5199;
 const CONSOLE_ORIGIN = `http://127.0.0.1:${String(CONSOLE_PORT)}`;
 const consolePage = (chat: string) => `<!doctype html><html><head><meta charset="utf-8">
 <style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head>
-<body><iframe id="chat" src="${chat}/"></iframe><script>
+<body><iframe id="chat"></iframe><script>
 const chat = document.getElementById("chat");
-addEventListener("message", (event) => {
+chat.src = ${JSON.stringify(chat)} + location.pathname;
+if (location.pathname === "/") addEventListener("message", (event) => {
   if (event.source !== chat.contentWindow || event.origin !== ${JSON.stringify(chat)}) return;
   if (event.data && event.data.awake === "chat" && event.data.browser === "ready") {
     chat.contentWindow.postMessage({ awake: "chat", browser: ${JSON.stringify(DEV_SERVER_URL)} }, event.origin);
@@ -117,6 +118,27 @@ const DEEP_DUMP = `(() => {
   const counts = ["iframe", "canvas"].map((tag) => tag + " " + document.querySelectorAll(tag).length);
   return [counts.join(", "), ...parts].join("\\n").slice(0, 2500);
 })()`;
+// Whether Chat's header is drawn on the page's own ground, or null where it drew no header.
+const HEADER_ON_GROUND = `(() => {
+  const header = document.querySelector("[data-chat-header]");
+  if (header === null) return null;
+  const ground = document.createElement("div");
+  ground.style.backgroundColor = "var(--background)";
+  document.body.append(ground);
+  const color = getComputedStyle(ground).backgroundColor;
+  ground.remove();
+  return getComputedStyle(header).backgroundColor === color;
+})()`;
+
+// Awake's build draws Match Awake's header on the page's ground only where Awake's console frames
+// Chat, so the console's tab runs straight into it (Awake's FDD-0053 §16).
+async function expectHeaderGround(frame: Frame, framed: boolean) {
+  const onGround = await frame.evaluate(HEADER_ON_GROUND);
+  if (onGround === framed) return;
+  const where = framed ? "in the console's frame" : "in a tab of its own";
+  const what = onGround === null ? "is missing" : "has the wrong ground";
+  throw new Error(`Chat's header ${what} ${where}.`);
+}
 
 const WIDTHS = [
   { width: 1440, height: 900 },
@@ -353,7 +375,25 @@ function views(input: {
     state: "all",
   });
   return [
-    { name: "thread", open: openThread },
+    {
+      name: "thread",
+      open: async (page) => {
+        await openThread(page);
+        await expectHeaderGround(page.mainFrame(), false);
+      },
+    },
+    {
+      // The thread in the console's Chat tab, as Awake's console frames it.
+      name: "thread-framed",
+      open: async (page) => {
+        await page.goto(`${CONSOLE_ORIGIN}/${input.environmentId}/${input.threadId}`);
+        const chat = page.frameLocator("#chat");
+        await chat.getByText(REPLY_MARK).first().waitFor({ timeout: 30_000 });
+        const frame = page.frames().find((each) => each.url().startsWith(origin));
+        if (frame === undefined) throw new Error("The console shows no Chat.");
+        await expectHeaderGround(frame, true);
+      },
+    },
     {
       // Chat's Browser panel on a dev server's page, as Awake's console opens a terminal's link to
       // the box's own address (FDD-0060 §5.4), beside the thread.
@@ -739,8 +779,9 @@ try {
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
 
-// Eleven views at every width, the Browser panel's and the dropped box's three among them.
-const expected = THEMES.length * WIDTHS.length * 11;
+// Twelve views at every width: the framed thread, the Browser panel's and the dropped box's three
+// among them.
+const expected = THEMES.length * WIDTHS.length * 12;
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");
