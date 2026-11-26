@@ -1516,6 +1516,13 @@ html[data-theme-id] [data-chat-header] [data-slot="separator"] {
   background-color: var(--contrast-toolbar-border);
 }
 
+/* Awake's console frames Chat on a sheet of the page's ground (Awake's FDD-0053 §16). There
+   Match Awake's header takes that ground too, so the console's tab runs straight into Chat with
+   no band of the window's color. In a tab of its own, or under another theme, it's unchanged. */
+html[data-awake-framed][data-theme-id="awake"] [data-chat-header] {
+  --toolbar-background: var(--background);
+}
+
 /* Chat code blocks join the other code surfaces on the code tokens. The
    default look keeps its secondary/input tints; themed palettes tint those
    surfaces with the accent, which fights syntax highlighting. */

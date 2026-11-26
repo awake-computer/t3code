@@ -9,6 +9,9 @@ import { primaryServerConfigAtom, primaryServerSettingsAtom } from "./state/serv
 
 export type ConsoleTheme = "light" | "dark" | "system";
 
+/** The root's mark while the console frames Chat: index.css draws Match Awake's header by it. */
+export const FRAMED_ATTRIBUTE = "data-awake-framed";
+
 /** What Chat posts the console when the gateway has ended its session (protocol v1). */
 export const SESSION_ENDED_MESSAGE = {
   awake: "chat",
@@ -193,6 +196,9 @@ export function startAwakeConsoleBridge(): void {
 
   const parent = window.parent;
   if (parent === window) return;
+  // Only the console frames Chat, as the gateway's frame-ancestors allow, and its sheet is the
+  // page's ground, so Match Awake's header takes that ground here (Awake's FDD-0053 §16).
+  document.documentElement.setAttribute(FRAMED_ATTRIBUTE, "");
   const consoleOrigin = () =>
     awakeConsoleOriginFrom(appAtomRegistry.get(primaryServerConfigAtom)?.awakeConsoleOrigin);
   window.addEventListener("message", (event) => {
