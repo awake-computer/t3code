@@ -9,7 +9,13 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import * as NodeUtil from "node:util";
-import { chromium, type Frame, type Page, type WebSocketRoute } from "playwright-core";
+import {
+  chromium,
+  type Frame,
+  type Page,
+  type WebSocket,
+  type WebSocketRoute,
+} from "playwright-core";
 
 const repoRoot = NodeURL.fileURLToPath(new URL("..", import.meta.url));
 const { values: options } = NodeUtil.parseArgs({
@@ -64,9 +70,14 @@ button{margin-top:12px;padding:8px 16px;border-radius:8px;border:0;background:#1
 <section><h2>Enterprise</h2><div class="price">Talk to us</div><p>SSO, SCIM and audit.</p><button>Contact sales</button></section>
 </main></body></html>`;
 
+// The box's browser shown alone, which Awake's console frames in its Browser view (FDD-0060 §16).
+const AWAKE_BROWSER_PATH = "/awake/browser";
+const PREVIEW_STREAM = "/api/preview-stream";
+
 // A stand-in for Awake's console: a page at the console's origin that frames Awake Chat at its own
 // path, as the workspace's Chat tab does. At its root it hands Chat a terminal's link once Chat
-// says it can open one (protocol v1's {awake: "chat", browser}), as Open in box browser does.
+// says it can open one (protocol v1's {awake: "chat", browser}), as Open in box browser does. At
+// the browser alone's path it shows the frame and, if the browser shows nothing, hands it the page.
 const CONSOLE_PORT = 5199;
 const CONSOLE_ORIGIN = `http://127.0.0.1:${String(CONSOLE_PORT)}`;
 const consolePage = (chat: string) => `<!doctype html><html><head><meta charset="utf-8">
@@ -74,10 +85,19 @@ const consolePage = (chat: string) => `<!doctype html><html><head><meta charset=
 <body><iframe id="chat"></iframe><script>
 const chat = document.getElementById("chat");
 chat.src = ${JSON.stringify(chat)} + location.pathname;
-if (location.pathname === "/") addEventListener("message", (event) => {
+const post = (message) => chat.contentWindow.postMessage(message, ${JSON.stringify(chat)});
+const alone = location.pathname === ${JSON.stringify(AWAKE_BROWSER_PATH)};
+window.awakePages = [];
+window.awakeShown = (shown) => post({ awake: "chat", shown });
+addEventListener("message", (event) => {
   if (event.source !== chat.contentWindow || event.origin !== ${JSON.stringify(chat)}) return;
-  if (event.data && event.data.awake === "chat" && event.data.browser === "ready") {
-    chat.contentWindow.postMessage({ awake: "chat", browser: ${JSON.stringify(DEV_SERVER_URL)} }, event.origin);
+  const data = event.data;
+  if (!data || data.awake !== "chat") return;
+  if (alone && typeof data.page === "string") window.awakePages.push(data.page);
+  if (data.browser !== "ready") return;
+  if (alone) post({ awake: "chat", shown: true });
+  if (alone ? window.awakePages.at(-1) === "" : location.pathname === "/") {
+    post({ awake: "chat", browser: ${JSON.stringify(DEV_SERVER_URL)} });
   }
 });
 </script></body></html>`;
@@ -139,6 +159,28 @@ async function expectHeaderGround(frame: Frame, framed: boolean) {
   const what = onGround === null ? "is missing" : "has the wrong ground";
   throw new Error(`Chat's header ${what} ${where}.`);
 }
+
+// Whether the browser alone's tab strip and address row are drawn on the page's own ground, which
+// is the console's sheet, or null where it drew neither.
+const PANEL_ON_GROUND = `(() => {
+  const ground = document.createElement("div");
+  ground.style.backgroundColor = "var(--background)";
+  document.body.append(ground);
+  const color = getComputedStyle(ground).backgroundColor;
+  ground.remove();
+  const drawn = (element) => {
+    for (let node = element; node !== null; node = node.parentElement) {
+      const background = getComputedStyle(node).backgroundColor;
+      if (background !== "rgba(0, 0, 0, 0)") return background;
+    }
+    return null;
+  };
+  const rows = ["[data-right-panel-tabbar]", "[data-surface-subheader]"].map((row) =>
+    document.querySelector(row),
+  );
+  if (rows.some((row) => row === null)) return null;
+  return rows.every((row) => drawn(row) === color);
+})()`;
 
 const WIDTHS = [
   { width: 1440, height: 900 },
@@ -445,6 +487,47 @@ function views(input: {
               globalThis as unknown as { document: { activeElement: { blur?: () => void } | null } }
             ).document.activeElement?.blur?.(),
           );
+        await page.mouse.move(1, 1);
+      },
+    },
+    {
+      // The box's browser alone, as the console's Browser view frames it: its first visit hands
+      // it the dev server's page, and hidden it holds its stream (Awake's FDD-0060 §16).
+      name: "browser-alone",
+      open: async (page) => {
+        const streams: Array<WebSocket> = [];
+        page.on("websocket", (socket) => {
+          if (socket.url().includes(PREVIEW_STREAM)) streams.push(socket);
+        });
+        const streaming = async () => streams.some((socket) => !socket.isClosed());
+        const alone = () => page.frames().find((frame) => frame.url().startsWith(origin));
+        const pageShown = () =>
+          alone()
+            ?.evaluate(deepTextCheck(DEV_PAGE_TITLE))
+            .then((value) => value === true)
+            .catch(() => false) ?? Promise.resolve(false);
+        await page.goto(`${CONSOLE_ORIGIN}${AWAKE_BROWSER_PATH}`);
+        await waitFor(pageShown, "the dev server's page in the browser alone", 120_000);
+        const devOrigin = new URL(DEV_SERVER_URL).origin;
+        const told = `window.awakePages.includes(${JSON.stringify(devOrigin)})`;
+        if ((await page.evaluate(told)) !== true) {
+          throw new Error("The browser alone didn't tell the console the page it shows.");
+        }
+        const frame = alone();
+        if (frame === undefined) throw new Error("The console shows no browser.");
+        if ((await frame.locator('[data-slot="sidebar"], [data-chat-header]').count()) > 0) {
+          throw new Error("The browser alone draws Chat's sidebar or header.");
+        }
+        if ((await frame.evaluate(PANEL_ON_GROUND)) !== true) {
+          throw new Error("The browser alone's toolbar isn't on the page's ground.");
+        }
+        await waitFor(streaming, "the browser alone's stream", 30_000);
+        await page.evaluate("window.awakeShown(false)");
+        await waitFor(async () => !(await streaming()), "the hidden browser to end its stream");
+        await page.evaluate("window.awakeShown(true)");
+        await waitFor(streaming, "the browser alone's stream once shown again", 30_000);
+        // As the panel in Chat, the page draws from the stream frame by frame.
+        await page.waitForTimeout(3_000);
         await page.mouse.move(1, 1);
       },
     },
@@ -779,9 +862,9 @@ try {
   NodeFS.writeFileSync(NodePath.join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 }
 
-// Twelve views at every width: the framed thread, the Browser panel's and the dropped box's three
-// among them.
-const expected = THEMES.length * WIDTHS.length * 12;
+// Thirteen views at every width: the framed thread, the Browser panel's, the browser alone's and
+// the dropped box's three among them.
+const expected = THEMES.length * WIDTHS.length * 13;
 console.log(`[awake-screenshots] ${String(captured.length)} of ${String(expected)} captured.`);
 if (failures.length > 0 || captured.length !== expected) {
   const log = NodeFS.readFileSync(NodePath.join(out, "server.log"), "utf8").split("\n");
