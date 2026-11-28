@@ -136,8 +136,9 @@ function setup(options: { readonly listLoaded?: boolean; readonly tabs?: boolean
         ];
   useRightPanelStore.setState({
     byThreadKey: {
+      // T3 Code's own sync leaves a ref it follows closed; alone, the panel shows it anyway.
       [BROWSER_KEY]: {
-        isOpen: true,
+        isOpen: false,
         activeSurfaceId: surfaces.length > 0 ? "browser:tab-1" : null,
         surfaces,
       },

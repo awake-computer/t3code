@@ -16,7 +16,7 @@ import { useRightPanelSurfaceClose } from "~/hooks/useRightPanelSurfaceClose";
 import { setActivePreviewTab, useThreadPreviewState } from "~/previewStateStore";
 import {
   type RightPanelSurface,
-  selectActiveRightPanelSurface,
+  selectSelectedRightPanelSurface,
   selectThreadRightPanelState,
   useRightPanelStore,
 } from "~/rightPanelStore";
@@ -74,8 +74,9 @@ function AwakeBrowser(props: { readonly environmentId: EnvironmentId }) {
   const surfaces = useRightPanelStore(
     (state) => selectThreadRightPanelState(state.byThreadKey, threadRef).surfaces,
   );
+  // Alone, the panel is always open, whatever T3 Code's right panel last recorded for it.
   const activeSurface = useRightPanelStore((state) =>
-    selectActiveRightPanelSurface(state.byThreadKey, threadRef),
+    selectSelectedRightPanelSurface(state.byThreadKey, threadRef),
   );
   // Framed by Awake's console, the page streams only once the console says it shows the frame.
   const [shown, setShown] = useState(() => awakeConsoleBrowserPage() === undefined);
@@ -110,7 +111,8 @@ function AwakeBrowser(props: { readonly environmentId: EnvironmentId }) {
   }, [ready, pageUrl]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tells Awake's console the browser takes its links, after its first word on what it shows
   useEffect(() => {
-    if (ready) void awakeConsoleWebLinks()?.setReady(true).catch(() => undefined);
+    const links = awakeConsoleWebLinks();
+    if (ready && links !== undefined) void links.setReady(true).catch(() => undefined);
   }, [ready]);
 
   const runtimeTabId = (tabId: string) => previewRuntimeTabId(threadRef, serverEpoch, tabId);

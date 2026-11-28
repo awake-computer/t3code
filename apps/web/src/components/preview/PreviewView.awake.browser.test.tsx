@@ -12,15 +12,14 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
 import "~/index.css";
-import type { AwakeBrowserAlone } from "~/awakeConsole";
-import { act, render } from "../../../test/render";
+import { AWAKE_LINK_HOLD_MS, type AwakeBrowserAlone } from "~/awakeConsole";
+import { act, fakeTimers, render } from "../../../test/render";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn((_url: string) => undefined),
   openPreviewSession: vi.fn(async (_input: unknown) => ({ _tag: "Success", value: {} })),
   openUrlInPreview: vi.fn(async (_input: unknown) => ({ _tag: "Success", value: undefined })),
   grantControl: () => {},
-  holdMs: 60_000,
   url: "http://localhost:5173/",
   noTab: false,
 }));
@@ -34,12 +33,6 @@ const STUB_BROWSER_DEFAULTS = {
   profileId: DEFAULT_BROWSER_PROFILE_ID,
 };
 
-vi.mock(import("~/awakeConsole"), async (original) => ({
-  ...(await original()),
-  get AWAKE_LINK_HOLD_MS() {
-    return mocks.holdMs;
-  },
-}));
 vi.mock(import("~/state/session"), async (original) => ({
   ...(await original()),
   readEnvironmentScope: () => true,
@@ -127,7 +120,6 @@ const BROWSER_REF = {
 function setup(options: { readonly url?: string; readonly noTab?: boolean } = {}) {
   vi.clearAllMocks();
   mocks.grantControl = () => {};
-  mocks.holdMs = 60_000;
   mocks.url = options.url ?? "http://localhost:5173/";
   mocks.noTab = options.noTab ?? false;
 }
@@ -191,12 +183,18 @@ describe("PreviewView shown alone in Awake's console", () => {
 
   it("opens the console's link in a tab of its own when the tab isn't held in time", async () => {
     setup();
-    mocks.holdMs = 0;
+    await using screen = await render(
+      <PreviewView threadRef={BROWSER_REF} tabId="tab-1" visible awake={alone()} />,
+    );
+    await expect.element(page.getByTestId("server-browser-surface")).toBeInTheDocument();
+    using _timers = fakeTimers();
     const awake = alone({ url: "http://localhost:3000/", id: 3 });
-    await using _screen = await render(
+    await screen.rerender(
       <PreviewView threadRef={BROWSER_REF} tabId="tab-1" visible awake={awake} />,
     );
-    await vi.waitFor(() => expect(mocks.openUrlInPreview).toHaveBeenCalledTimes(1));
+    await act(() => vi.advanceTimersByTimeAsync(AWAKE_LINK_HOLD_MS - 1));
+    expect(mocks.openUrlInPreview).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
     expect(mocks.openUrlInPreview).toHaveBeenCalledWith(
       expect.objectContaining({ threadRef: BROWSER_REF, url: "http://localhost:3000/" }),
     );
