@@ -92,20 +92,21 @@ vi.mock(import("~/browser/openFileInPreview"), async (original) => ({
   ...(await original()),
   openUrlInPreview: mocks.openUrlInPreview as never,
 }));
+interface SurfaceProps {
+  readonly visible: boolean;
+  readonly onControl?: (control: { readonly controller: "you" } | null) => void;
+  readonly ref?: Ref<unknown>;
+}
+
 // The stream's surface: this view holds the tab once the server says so, as T3 Code's does.
 vi.mock(import("~/browser/ServerBrowserSurface"), async (original) => {
   const { useEffect, useImperativeHandle } = await import("react");
-  function ServerBrowserSurface(props: {
-    readonly visible: boolean;
-    readonly onControl?: (control: { readonly controller: "you" } | null) => void;
-    readonly ref?: Ref<unknown>;
-  }) {
-    useImperativeHandle(props.ref, () => ({ navigate: mocks.navigate }));
-    const { onControl } = props;
+  function ServerBrowserSurface({ visible, onControl, ref }: SurfaceProps) {
+    useImperativeHandle(ref, () => ({ navigate: mocks.navigate }));
     useEffect(() => {
       mocks.grantControl = () => onControl?.({ controller: "you" });
     }, [onControl]);
-    return <div data-testid="server-browser-surface" data-visible={String(props.visible)} />;
+    return <div data-testid="server-browser-surface" data-visible={visible ? "true" : "false"} />;
   }
   return { ...(await original()), ServerBrowserSurface: ServerBrowserSurface as never };
 });
