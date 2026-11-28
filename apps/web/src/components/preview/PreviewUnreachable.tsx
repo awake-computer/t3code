@@ -21,7 +21,8 @@ export function PreviewFileNotShown({
   url: string;
   fileName: string;
   downloadUrl: string | null;
-  onOpen: () => void;
+  /** Absent where the page's address must not open in this browser (Awake's browser alone). */
+  onOpen: (() => void) | undefined;
 }) {
   const host = safeHost(url) ?? url;
   return (
@@ -37,9 +38,11 @@ export function PreviewFileNotShown({
         </p>
         <div className="mt-auto flex items-center gap-2 pt-8">
           <div className="flex-1" />
-          <Button type="button" variant="outline" size="sm" onClick={onOpen}>
-            Open in browser
-          </Button>
+          {onOpen ? (
+            <Button type="button" variant="outline" size="sm" onClick={onOpen}>
+              Open in browser
+            </Button>
+          ) : null}
           {downloadUrl ? (
             <Button type="button" size="sm" render={<a href={downloadUrl} download={fileName} />}>
               Download

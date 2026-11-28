@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
+  AWAKE_BROWSER_PATH,
   BROWSER_READY_MESSAGE,
+  browserPageMessage,
   consoleBrowserLink,
+  consoleShownMessage,
   consoleThemeMessage,
   isBoxLocalLink,
   isSessionEndedAnswer,
@@ -114,6 +117,37 @@ describe("protocol v1 with Awake's console", () => {
       expect(stuck.done).toBe(true);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("holds the browser alone at the one path the gateway's entry admits", () => {
+    expect(AWAKE_BROWSER_PATH).toBe("/awake/browser");
+  });
+
+  it("takes whether the console shows the browser alone only from exactly the console", () => {
+    const shown = (origin: string, data: unknown) =>
+      consoleShownMessage({ origin, data }, consoleOrigin);
+    expect(shown(consoleOrigin, { awake: "chat", shown: true })).toBe(true);
+    expect(shown(consoleOrigin, { awake: "chat", shown: false })).toBe(false);
+    expect(shown("https://other.example", { awake: "chat", shown: true })).toBeUndefined();
+    expect(shown(consoleOrigin, { awake: "chat", shown: "true" })).toBeUndefined();
+    expect(shown(consoleOrigin, { shown: true })).toBeUndefined();
+    expect(shown(consoleOrigin, true)).toBeUndefined();
+    const v1 = { origin: consoleOrigin, data: { awake: "chat", shown: true } };
+    expect(consoleShownMessage(v1, undefined)).toBeUndefined();
+  });
+
+  it("tells the console only the origin of the page its browser shows, or nothing", () => {
+    const page = (url: string | null | undefined) => browserPageMessage(url).page;
+    expect(browserPageMessage("http://localhost:5173/pricing?plan=team#faq")).toEqual({
+      awake: "chat",
+      page: "http://localhost:5173",
+    });
+    expect(page("https://localhost:8443/checkout")).toBe("https://localhost:8443");
+    expect(page("http://[::1]:3000/")).toBe("http://[::1]:3000");
+    expect(page("https://github.com/awake-computer")).toBe("https://github.com");
+    for (const url of [null, undefined, "", "about:blank", "file:///a.html", "pricing"]) {
+      expect(page(url)).toBe("");
     }
   });
 });

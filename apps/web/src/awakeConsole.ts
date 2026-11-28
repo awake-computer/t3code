@@ -1,4 +1,9 @@
-import { awakeConsoleOriginFrom, type DesktopBridge, type EnvironmentId } from "@t3tools/contracts";
+import {
+  awakeConsoleOriginFrom,
+  type DesktopBridge,
+  type EnvironmentId,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import { IS_AWAKE_BRAND, MATCH_AWAKE_THEME_ID } from "./branding";
 import { readThemePreference, setAppearanceMode } from "./hooks/useTheme";
@@ -149,6 +154,100 @@ export function awakeConsoleWebLinks(): DesktopBridge["webLinks"] | undefined {
     },
   };
   return consoleLinks;
+}
+
+/** The box's browser shown alone, at a path of Awake's own, which the console frames. */
+export const AWAKE_BROWSER_PATH = "/awake/browser";
+
+/**
+ * The thread the workspace's browser keeps its tabs under, which no thread of T3 Code's is, as
+ * the Pull requests page keeps its panel. The server keeps a tab by thread and never asks whether
+ * the thread exists, and an agent's tools reach only its own thread's tabs.
+ */
+export const AWAKE_BROWSER_THREAD_ID = ThreadId.make("awake-workspace-browser");
+
+/** A link the console handed the browser alone, numbered so the same address can come again. */
+export interface AwakeBrowserLink {
+  readonly url: string;
+  readonly id: number;
+}
+
+/** The browser shown alone: the console's latest link, and word back once it has opened. */
+export interface AwakeBrowserAlone {
+  readonly link: AwakeBrowserLink | undefined;
+  readonly onLinkOpened: (id: number) => void;
+}
+
+/** How long a console's link waits to take the open tab before it opens a tab of its own. */
+export const AWAKE_LINK_HOLD_MS = 5_000;
+
+/** Whether the console shows the browser's frame, only protocol v1's from exactly its origin. */
+export function consoleShownMessage(
+  message: { readonly origin: string; readonly data: unknown },
+  consoleOrigin: string | undefined,
+): boolean | undefined {
+  if (consoleOrigin === undefined || message.origin !== consoleOrigin) return undefined;
+  const { data } = message;
+  if (typeof data !== "object" || data === null) return undefined;
+  const { awake, shown } = data as Record<string, unknown>;
+  return awake === "chat" && typeof shown === "boolean" ? shown : undefined;
+}
+
+interface BrowserPageMessage {
+  readonly awake: "chat";
+  readonly page: string;
+}
+
+/** What the browser alone tells the console it shows: its open tab's origin, or "" for none. */
+export function browserPageMessage(url: string | null | undefined): BrowserPageMessage {
+  let page = "";
+  try {
+    const parsed = new URL(url ?? "");
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") page = parsed.origin;
+  } catch {
+    // Not an address: the browser shows no page.
+  }
+  return { awake: "chat", page };
+}
+
+interface ConsoleBrowserPage {
+  readonly onShown: (listener: (shown: boolean) => void) => () => void;
+  readonly reportPage: (url: string | null | undefined) => void;
+}
+
+let consoleBrowserPage: ConsoleBrowserPage | null | undefined;
+
+/**
+ * Protocol v1 for the browser alone, only where the console frames it: whether the console shows
+ * the frame, and what the browser shows, a word only this page sends. One for the page.
+ */
+export function awakeConsoleBrowserPage(): ConsoleBrowserPage | undefined {
+  if (consoleBrowserPage !== undefined) return consoleBrowserPage ?? undefined;
+  consoleBrowserPage = null;
+  if (!IS_AWAKE_BRAND || window.parent === window) return undefined;
+  const parent = window.parent;
+  const consoleOrigin = () =>
+    awakeConsoleOriginFrom(appAtomRegistry.get(primaryServerConfigAtom)?.awakeConsoleOrigin);
+  let reported: string | undefined;
+  consoleBrowserPage = {
+    onShown: (listener) => {
+      const receive = (event: MessageEvent) => {
+        if (event.source !== parent) return;
+        const shown = consoleShownMessage(event, consoleOrigin());
+        if (shown !== undefined) listener(shown);
+      };
+      window.addEventListener("message", receive);
+      return () => window.removeEventListener("message", receive);
+    },
+    reportPage: (url) => {
+      const origin = consoleOrigin();
+      const message = browserPageMessage(url);
+      if (origin === undefined || message.page === reported) return;
+      reported = message.page;
+      parent.postMessage(message, origin);
+    },
+  };
+  return consoleBrowserPage;
 }
 
 /** Whether an answer from the box's host is the gateway ending this session. */

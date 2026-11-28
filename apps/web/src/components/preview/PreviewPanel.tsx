@@ -4,6 +4,7 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 
+import type { AwakeBrowserAlone } from "~/awakeConsole";
 import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { useEnvironmentScope } from "~/state/session";
@@ -21,6 +22,8 @@ interface Props {
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
   ) => void;
+  /** Awake: shown alone in Awake's console, with the links the console hands it. */
+  awake?: AwakeBrowserAlone | undefined;
 }
 
 export function PreviewPanel({
@@ -30,6 +33,7 @@ export function PreviewPanel({
   configuredUrls,
   visible,
   onSendAnnotation,
+  awake,
 }: Props) {
   const available = usePreviewAvailable(threadRef.environmentId);
   const canOperatePreview = useEnvironmentScope(threadRef.environmentId, AuthPreviewOperateScope);
@@ -55,6 +59,7 @@ export function PreviewPanel({
         configuredUrls={configuredUrls}
         visible={visible}
         {...(onSendAnnotation ? { onSendAnnotation } : {})}
+        awake={awake}
       />
     </PreviewPanelShell>
   );

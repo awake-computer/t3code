@@ -156,6 +156,8 @@ export interface RightPanelTabsProps {
   /** Overrides the default reason while side chats are available but cannot start. */
   sideChatDisabledReason?: string | null;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
+  /** Awake: the browser shown alone, whose menu offers only what it can add. */
+  awakeAlone?: boolean | undefined;
   children: ReactNode;
 }
 
@@ -1162,9 +1164,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         ]
       : []),
   ] as const;
+  // Awake: the browser shown alone offers only what it can add.
+  const offered = addSurfaceActions.filter((action) => action.available || !props.awakeAlone);
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const action = surfaceShortcutActionForKey(addSurfaceActions, event.nativeEvent);
+    const action = surfaceShortcutActionForKey(offered, event.nativeEvent);
     if (!action) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1424,7 +1428,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   sideOffset={6}
                   onKeyDownCapture={handleAddSurfaceMenuKeyDown}
                 >
-                  {addSurfaceActions.map((action) => {
+                  {offered.map((action) => {
                     const Icon = action.icon;
                     if (action.label === "Browser" && action.available) {
                       return (

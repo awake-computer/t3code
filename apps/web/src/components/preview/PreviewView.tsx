@@ -79,7 +79,13 @@ import { BrowserDeviceToolbar } from "~/browser/BrowserDeviceToolbar";
 import { BROWSER_DEVICE_TOOLBAR_HEIGHT } from "~/browser/browserViewportLayout";
 import { useBrowserLayoutZoomFactor } from "~/browser/useBrowserLayoutZoomFactor";
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
-import { isBrowserSettingsReadError } from "~/browser/openFileInPreview";
+import { isBrowserSettingsReadError, openUrlInPreview } from "~/browser/openFileInPreview";
+import {
+  AWAKE_LINK_HOLD_MS,
+  type AwakeBrowserAlone,
+  type AwakeBrowserLink,
+  isBoxLocalLink,
+} from "~/awakeConsole";
 import { PreviewFileNotShown, PreviewUnreachable } from "./PreviewUnreachable";
 import { revealInFileExplorerLabel } from "./fileExplorerLabel";
 import { Badge } from "~/components/ui/badge";
@@ -112,6 +118,8 @@ interface Props {
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
   ) => void;
+  /** Awake: shown alone in Awake's console, with the links the console hands it. */
+  awake?: AwakeBrowserAlone | undefined;
 }
 
 function previewProfileName(
@@ -128,8 +136,10 @@ function ServerTabFileNotShown(props: {
   readonly tabId: string;
   readonly url: string;
   readonly download: { readonly id: string; readonly fileName: string };
+  readonly opensInBrowser: boolean;
 }) {
   const access = usePreviewStreamAccess(props.threadRef.environmentId);
+  const openInBrowser = () => void localApi?.shell.openExternal(props.url).catch(() => undefined);
   return (
     <PreviewFileNotShown
       url={props.url}
@@ -142,7 +152,7 @@ function ServerTabFileNotShown(props: {
             )
           : null
       }
-      onOpen={() => void localApi?.shell.openExternal(props.url).catch(() => undefined)}
+      onOpen={props.opensInBrowser ? openInBrowser : undefined}
     />
   );
 }
@@ -165,6 +175,7 @@ export function PreviewView({
   configuredUrls,
   visible,
   onSendAnnotation,
+  awake,
 }: Props) {
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const [find, setFind] = useState<{ tabId: string; requestId: number } | null>(null);
@@ -343,6 +354,34 @@ export function PreviewView({
     if (isServerTab) serverSurfaceRef.current?.stopLoading();
     else if (previewBridge && runtimeTabId) void previewBridge.stopLoading(runtimeTabId);
   };
+
+  // Awake: shown alone, nothing of the box's own opens in the member's own browser.
+  const opensInBrowser = Boolean(tabId) && !(awake !== undefined && isBoxLocalLink(url));
+
+  // Awake: the console's link takes the open tab, as its address would, once this view holds
+  // the tab; with no tab, or none held in time, it opens in a tab of its own.
+  const awakeLink = awake?.link;
+  const awakeLinkOpened = useRef<number | null>(null);
+  const awakeTabHeld = !isServerTab || !serverInputDisabled;
+  const openAwakeLink = useEffectEvent(async (link: AwakeBrowserLink, inTab: boolean) => {
+    awakeLinkOpened.current = link.id;
+    awake?.onLinkOpened(link.id);
+    if (inTab) return handleOpenServerUrl(link.url);
+    const result = await openUrlInPreview({ threadRef, url: link.url, openPreview: open });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      toastManager.add({ type: "error", title: "Could not open the link", description: link.url });
+    }
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- hands the console's link to the box's browser once this view holds the tab, or after a timer
+  useEffect(() => {
+    if (awakeLink === undefined || awakeLink.id === awakeLinkOpened.current) return;
+    if (awakeTabHeld) {
+      void openAwakeLink(awakeLink, true);
+      return;
+    }
+    const timer = setTimeout(() => void openAwakeLink(awakeLink, false), AWAKE_LINK_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [awakeLink, awakeTabHeld]);
 
   const adjustServerTab = async (change: Omit<PreviewAdjustInput, "threadId" | "tabId">) => {
     if (!tabId) return;
@@ -997,12 +1036,13 @@ export function PreviewView({
         onRefresh={handleRefresh}
         onStopLoading={handleStopLoading}
         onSubmit={(next) => void handleSubmitUrl(next)}
-        onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
+        onOpenInBrowser={opensInBrowser ? handleOpenInBrowser : undefined}
         onCapture={previewBridge && tabId && !isServerTab ? handleCapture : undefined}
         captureDisabled={!desktopOverlay || isUnreachable}
         recording={recordingRuntimeTabId !== null}
+        // Awake: alone, there's no chat for the browser to float over.
         onPictureInPicture={
-          tabId && (isServerTab || previewBridge) ? handlePictureInPicture : undefined
+          !awake && tabId && (isServerTab || previewBridge) ? handlePictureInPicture : undefined
         }
         pictureInPicture={miniPlayerTabId === tabId}
         pictureInPictureDisabled={
@@ -1159,6 +1199,7 @@ export function PreviewView({
               tabId={snapshot?.tabId ?? ""}
               url={navStatus.url}
               download={navStatus.download}
+              opensInBrowser={opensInBrowser}
             />
           </div>
         ) : navStatus._tag === "LoadFailed" ? (

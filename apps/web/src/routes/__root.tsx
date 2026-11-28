@@ -13,6 +13,7 @@ import {
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { AWAKE_BROWSER_PATH } from "../awakeConsole";
 import { APP_DISPLAY_NAME, APP_VERSION, IS_AWAKE_BRAND } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
@@ -155,6 +156,8 @@ function RootRouteBranch() {
   );
 
   if (pathname === GUEST_PAGE_PATH) return <Outlet />;
+  // Awake: the box's browser alone, in Awake's console beside its own list, with no app shell.
+  if (pathname === AWAKE_BROWSER_PATH) return <Outlet />;
 
   if (
     pathname === "/pair" ||
